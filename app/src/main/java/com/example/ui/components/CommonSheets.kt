@@ -676,7 +676,7 @@ fun BrilliantNotInstalledDialog(
     val body = if (language == AppLanguage.BENGALI) {
         "এই ফোনে Brilliant Connect ($packageName) অ্যাপটি পাওয়া যায়নি।\n\nব্রিলিয়ান্ট থেকে সরাসরি কল করার জন্য প্লে স্টোর থেকে Brilliant Connect ইনস্টল করুন, অথবা আপনার ফোনে ভিন্ন প্যাকেজ থাকলে ব্রিলিয়ান্ট সেটিংস থেকে প্যাকেজ নাম আপডেট করুন।"
     } else {
-        "Brilliant Connect ($packageName) was not detected on this device.\n\nInstall Brilliant Connect from the Play Store to route VoIP calls directly from NovaCall, or adjust the package name in Brilliant Bridge Settings."
+        "Brilliant Connect ($packageName) was not detected on this device.\n\nInstall Brilliant Connect from the Play Store to route VoIP calls directly from Shajamal, or adjust the package name in Brilliant Bridge Settings."
     }
 
     AlertDialog(

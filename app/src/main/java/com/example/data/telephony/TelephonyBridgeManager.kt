@@ -2,18 +2,18 @@ package com.example.data.telephony
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.role.RoleManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioManager
-import android.media.ToneGenerator
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.CallLog
 import android.provider.ContactsContract
+import android.provider.Settings
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.SubscriptionManager
@@ -25,6 +25,7 @@ import com.example.data.model.CallDispatchResult
 import com.example.data.model.CallLogItem
 import com.example.data.model.CallRoute
 import com.example.data.model.DeviceContact
+import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SimCardInfo
 import com.example.data.model.UserPreferences
 import com.example.data.model.formatBangladeshNumberForBrilliant
@@ -34,39 +35,56 @@ import kotlinx.coroutines.withContext
 
 class TelephonyBridgeManager(private val context: Context) {
 
-    private var toneGenerator: ToneGenerator? = null
+    private val soundEngine = DialpadSoundEngine()
 
     fun hasPermission(permission: String): Boolean {
         return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
     }
 
-    fun playDtmfTone(symbol: String) {
-        val tone = when (symbol) {
-            "0" -> ToneGenerator.TONE_DTMF_0
-            "1" -> ToneGenerator.TONE_DTMF_1
-            "2" -> ToneGenerator.TONE_DTMF_2
-            "3" -> ToneGenerator.TONE_DTMF_3
-            "4" -> ToneGenerator.TONE_DTMF_4
-            "5" -> ToneGenerator.TONE_DTMF_5
-            "6" -> ToneGenerator.TONE_DTMF_6
-            "7" -> ToneGenerator.TONE_DTMF_7
-            "8" -> ToneGenerator.TONE_DTMF_8
-            "9" -> ToneGenerator.TONE_DTMF_9
-            "*" -> ToneGenerator.TONE_DTMF_S
-            "#" -> ToneGenerator.TONE_DTMF_P
-            else -> return
-        }
-        runCatching {
-            if (toneGenerator == null) {
-                toneGenerator = ToneGenerator(AudioManager.STREAM_DTMF, 65)
+    fun isDefaultDialer(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_DIALER)) {
+                return roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
             }
-            toneGenerator?.startTone(tone, 110)
+        }
+        val telecom = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+        return telecom?.defaultDialerPackage == context.packageName
+    }
+
+    fun createRequestDefaultDialerIntent(): Intent? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_DIALER)) {
+                return roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
+            }
+        }
+        return Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER).apply {
+            putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, context.packageName)
         }
     }
 
+    fun openAppNotificationSettings() {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", context.packageName, null)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+        runCatching { context.startActivity(intent) }
+    }
+
+    fun playDialpadSound(symbol: String, style: KeypadSoundStyle, volume: Float) {
+        soundEngine.playKey(symbol, style, volume)
+    }
+
     fun releaseToneGenerator() {
-        runCatching { toneGenerator?.release() }
-        toneGenerator = null
+        soundEngine.release()
     }
 
     @SuppressLint("MissingPermission")
@@ -134,7 +152,6 @@ class TelephonyBridgeManager(private val context: Context) {
             )
         }
 
-        // If device has Telecom accounts even when SubscriptionManager returned fewer entries
         if (slotMap.isEmpty() && accountHandles.isNotEmpty()) {
             accountHandles.take(2).forEachIndexed { idx, handle ->
                 val account = runCatching { telecomManager?.getPhoneAccount(handle) }.getOrNull()
@@ -227,13 +244,15 @@ class TelephonyBridgeManager(private val context: Context) {
         val route = if (simInfo.slotIndex == 0) CallRoute.SIM_1 else CallRoute.SIM_2
         val telUri = Uri.fromParts("tel", cleanNumber, null)
 
-        // Direct TelecomManager call when CALL_PHONE is granted & PhoneAccountHandle exists
+        // Use TelecomManager.placeCall so when NovaCall is Default Dialer, the call stays 100% inside NovaCall's InCallActivity!
         if (hasPermission(Manifest.permission.CALL_PHONE)) {
             val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-            if (telecomManager != null && simInfo.phoneAccountHandle != null) {
+            if (telecomManager != null) {
                 val placed = runCatching {
                     val extras = Bundle().apply {
-                        putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, simInfo.phoneAccountHandle)
+                        simInfo.phoneAccountHandle?.let {
+                            putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
+                        }
                     }
                     telecomManager.placeCall(telUri, extras)
                     true
@@ -243,23 +262,20 @@ class TelephonyBridgeManager(private val context: Context) {
                     return CallDispatchResult.Dispatched(
                         route = route,
                         formattedNumber = cleanNumber,
-                        messageBn = "${simInfo.displayName} দিয়ে কল করা হচ্ছে...",
+                        messageBn = "${simInfo.displayName} দিয়ে কল যাচ্ছে...",
                         messageEn = "Calling via ${simInfo.displayName}..."
                     )
                 }
             }
 
-            // Fallback ACTION_CALL with Dual-SIM slot extras
             val callIntent = Intent(Intent.ACTION_CALL, telUri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 putExtra("com.android.phone.force.slot", true)
                 putExtra("com.android.phone.extra.slot", simInfo.slotIndex)
                 putExtra("simSlot", simInfo.slotIndex)
                 putExtra("slot_id", simInfo.slotIndex)
-                putExtra("Cdma_Supp", true)
                 if (simInfo.subscriptionId >= 0) {
                     putExtra("subscription", simInfo.subscriptionId)
-                    putExtra("android.telephony.extra.SUBSCRIPTION_INDEX", simInfo.subscriptionId)
                 }
                 simInfo.phoneAccountHandle?.let {
                     putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
@@ -273,13 +289,12 @@ class TelephonyBridgeManager(private val context: Context) {
                 return CallDispatchResult.Dispatched(
                     route = route,
                     formattedNumber = cleanNumber,
-                    messageBn = "${simInfo.displayName} দিয়ে কল করা হচ্ছে...",
+                    messageBn = "${simInfo.displayName} দিয়ে কল যাচ্ছে...",
                     messageEn = "Calling via ${simInfo.displayName}..."
                 )
             }
         }
 
-        // Graceful fallback to ACTION_DIAL if CALL_PHONE isn't granted
         val dialIntent = Intent(Intent.ACTION_DIAL, telUri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra("com.android.phone.extra.slot", simInfo.slotIndex)
@@ -289,8 +304,8 @@ class TelephonyBridgeManager(private val context: Context) {
             CallDispatchResult.Dispatched(
                 route = route,
                 formattedNumber = cleanNumber,
-                messageBn = "ডায়ালারে নম্বর প্রস্তুত (${simInfo.displayName})",
-                messageEn = "Opened dialer for ${simInfo.displayName}"
+                messageBn = "কল শুরু করতে ফোনের CALL পারমিশন দিন",
+                messageEn = "Grant CALL permission for direct in-app calling"
             )
         }.getOrElse {
             CallDispatchResult.Error(
@@ -304,7 +319,8 @@ class TelephonyBridgeManager(private val context: Context) {
     fun placeBrilliantCall(
         rawNumber: String,
         bridgeStatus: BrilliantBridgeStatus,
-        prefs: UserPreferences
+        prefs: UserPreferences,
+        fallbackSim: SimCardInfo
     ): CallDispatchResult {
         val formatted = formatBangladeshNumberForBrilliant(rawNumber, prefs.brilliantAutoFormatBd)
         if (formatted.length < 3) {
@@ -320,18 +336,16 @@ class TelephonyBridgeManager(private val context: Context) {
             copyToClipboard("Brilliant Call", formatted)
         }
 
-        if (!bridgeStatus.isInstalled) {
-            return CallDispatchResult.BrilliantNotInstalled(targetPackage)
-        }
-
-        // Strategy 1: If Brilliant Connect registered a Telecom VoIP PhoneAccountHandle, use native TelecomManager
-        if (bridgeStatus.hasTelecomVoipAccount && hasPermission(Manifest.permission.CALL_PHONE)) {
+        // Priority 1: Telecom VoIP PhoneAccountHandle (keeps call 100% INSIDE NovaCall InCallActivity!)
+        if (hasPermission(Manifest.permission.CALL_PHONE)) {
             val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
             val handles = runCatching { telecomManager?.callCapablePhoneAccounts ?: emptyList() }
                 .getOrDefault(emptyList())
             val brilliantHandle = handles.firstOrNull { handle ->
-                handle.componentName.packageName == targetPackage ||
+                val pkgMatch = handle.componentName.packageName == targetPackage ||
                     handle.componentName.packageName.contains("brilliant", ignoreCase = true)
+                val label = runCatching { telecomManager?.getPhoneAccount(handle)?.label?.toString() }.getOrNull()
+                pkgMatch || (label?.contains("brilliant", ignoreCase = true) == true)
             }
             if (telecomManager != null && brilliantHandle != null) {
                 val telUri = Uri.fromParts("tel", formatted, null)
@@ -346,11 +360,46 @@ class TelephonyBridgeManager(private val context: Context) {
                     return CallDispatchResult.Dispatched(
                         route = CallRoute.BRILLIANT,
                         formattedNumber = formatted,
-                        messageBn = "ব্রিলিয়ান্ট কানেক্ট দিয়ে সরাসরি কল যাচ্ছে...",
-                        messageEn = "Calling directly via Brilliant Connect..."
+                        messageBn = "অ্যাপের ভেতর থেকেই ব্রিলিয়ান্ট VoIP কল যাচ্ছে...",
+                        messageEn = "Calling via Brilliant VoIP inside NovaCall..."
                     )
                 }
             }
+        }
+
+        // Priority 2: Stay strictly inside NovaCall when external handoff is disabled (default!)
+        if (!prefs.brilliantExternalHandoff) {
+            if (hasPermission(Manifest.permission.CALL_PHONE)) {
+                val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+                val telUri = Uri.fromParts("tel", formatted, null)
+                val placedInApp = runCatching {
+                    val extras = Bundle().apply {
+                        fallbackSim.phoneAccountHandle?.let {
+                            putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
+                        }
+                    }
+                    telecomManager?.placeCall(telUri, extras)
+                    telecomManager != null
+                }.getOrDefault(false)
+
+                if (placedInApp) {
+                    return CallDispatchResult.Dispatched(
+                        route = CallRoute.BRILLIANT,
+                        formattedNumber = formatted,
+                        messageBn = "অ্যাপের ভেতর থেকেই কল যাচ্ছে ($formatted) • ব্রিলিয়ান্ট আলাদা খোলা হয়নি",
+                        messageEn = "Calling in-app ($formatted) without leaving NovaCall"
+                    )
+                }
+            }
+            return CallDispatchResult.Error(
+                messageBn = "অ্যাপের ভেতর থেকে কল করতে NovaCall-কে ডিফল্ট ফোন অ্যাপ ও CALL পারমিশন দিন",
+                messageEn = "Set NovaCall as Default Phone App & grant CALL permission for in-app calling"
+            )
+        }
+
+        // Priority 3 (Only when user explicitly enabled External Brilliant Handoff in Settings)
+        if (!bridgeStatus.isInstalled) {
+            return CallDispatchResult.BrilliantNotInstalled(targetPackage)
         }
 
         val telUri = Uri.parse("tel:${Uri.encode(formatted)}")
@@ -402,7 +451,6 @@ class TelephonyBridgeManager(private val context: Context) {
             }
         }
 
-        // Strategy 4: Explicit Launch Intent with phone extras + clipboard backup
         val launchIntent = pm.getLaunchIntentForPackage(targetPackage)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra("phone_number", formatted)

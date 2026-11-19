@@ -1,0 +1,140 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidPhoneKey(key) {
+      return key is string && key.size() >= 4 && key.size() <= 15 && key.matches('^[0-9]+$');
+    }
+
+    function isValidCategory(cat) {
+      return cat is string && cat in ['PERSONAL', 'BUSINESS', 'DELIVERY', 'SPAM', 'SCAM'];
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.callerIdEnabled is bool &&
+        data.communityShareEnabled is bool &&
+        data.sharedContactCount is int && data.sharedContactCount >= 0 && data.sharedContactCount <= 5000 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCallerEntry(data) {
+      return isValidPhoneKey(data.phoneKey) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.carrierLabel is string && data.carrierLabel.size() <= 60 &&
+        isValidCategory(data.category) &&
+        data.spamReports is int && data.spamReports >= 0 && data.spamReports <= 100000 &&
+        data.reportCount is int && data.reportCount >= 1 && data.reportCount <= 100000 &&
+        data.contributedByUid is string && data.contributedByUid.size() >= 1 && data.contributedByUid.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        incoming().userId == request.auth.uid &&
+        incoming().keys().hasAll([
+          'userId', 'displayName', 'callerIdEnabled', 'communityShareEnabled',
+          'sharedContactCount', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'userId', 'displayName', 'callerIdEnabled', 'communityShareEnabled',
+          'sharedContactCount', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'callerIdEnabled', 'communityShareEnabled',
+          'sharedContactCount', 'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    match /caller_directory/{phoneKey} {
+      // Exact phone-number lookup by signed-in users (no full-directory scraping)
+      allow get: if isSignedIn() && isValidPhoneKey(phoneKey);
+
+      // List queries strictly scoped to entries contributed by the signed-in user
+      allow list: if isSignedIn() && resource.data.contributedByUid == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+        isValidPhoneKey(phoneKey) &&
+        incoming().phoneKey == phoneKey &&
+        incoming().contributedByUid == request.auth.uid &&
+        incoming().keys().hasAll([
+          'phoneKey', 'displayName', 'carrierLabel', 'category',
+          'spamReports', 'reportCount', 'contributedByUid', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'phoneKey', 'displayName', 'carrierLabel', 'category',
+          'spamReports', 'reportCount', 'contributedByUid', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidCallerEntry(incoming());
+
+      allow update: if isSignedIn() &&
+        isValidPhoneKey(phoneKey) &&
+        isValidCallerEntry(incoming()) &&
+        incoming().phoneKey == existing().phoneKey &&
+        incoming().contributedByUid == existing().contributedByUid &&
+        incoming().createdAt == existing().createdAt && (
+          // Action 1: Original contributor edits entry
+          (
+            existing().contributedByUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'carrierLabel', 'category', 'spamReports', 'reportCount', 'updatedAt'
+            ])
+          ) ||
+          // Action 2: Another community member updates caller tag or reports spam (+0 or +1)
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'category', 'spamReports', 'reportCount', 'updatedAt'
+            ]) &&
+            incoming().reportCount >= existing().reportCount &&
+            incoming().reportCount <= existing().reportCount + 1 &&
+            incoming().spamReports >= existing().spamReports &&
+            incoming().spamReports <= existing().spamReports + 1
+          )
+        );
+
+      allow delete: if isSignedIn() &&
+        isValidPhoneKey(phoneKey) &&
+        existing().contributedByUid == request.auth.uid;
+    }
+  }
+}

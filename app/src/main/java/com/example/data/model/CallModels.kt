@@ -23,6 +23,12 @@ enum class BrilliantLaunchMode {
     LAUNCH_AND_COPY
 }
 
+enum class KeypadSoundStyle {
+    DTMF_CLASSIC,
+    STUDIO_CHIME,
+    SOFT_CLICK
+}
+
 enum class CallFilterType {
     ALL,
     MISSED,
@@ -96,13 +102,22 @@ data class UserPreferences(
     val brilliantAutoFormatBd: Boolean = true,
     val brilliantAutoCopyClipboard: Boolean = true,
     val brilliantSmartPrefixes: String = "+,00",
+    val brilliantExternalHandoff: Boolean = false,
     val defaultRoute: DefaultRoutePreference = DefaultRoutePreference.ASK,
     val sim1Alias: String = "",
     val sim2Alias: String = "",
     val dtmfSoundEnabled: Boolean = true,
+    val keypadSoundStyle: KeypadSoundStyle = KeypadSoundStyle.DTMF_CLASSIC,
+    val keypadSoundVolume: Float = 0.9f,
     val hapticEnabled: Boolean = true,
     val darkThemeEnabled: Boolean = true,
     val language: AppLanguage = AppLanguage.BENGALI,
+    val notifyIncomingCalls: Boolean = true,
+    val notifyMissedCalls: Boolean = true,
+    val notifyOngoingCalls: Boolean = true,
+    val vibrateOnRing: Boolean = true,
+    val autoRejectBlocked: Boolean = true,
+    val autoSpeakerOnCall: Boolean = false,
     val quickReplies: List<String> = DEFAULT_QUICK_REPLIES
 ) {
     companion object {

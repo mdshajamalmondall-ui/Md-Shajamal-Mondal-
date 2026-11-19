@@ -20,6 +20,9 @@ interface NovaCallDao {
     @Query("SELECT * FROM blocked_numbers ORDER BY blockedAt DESC")
     fun observeBlockedNumbers(): Flow<List<BlockedNumberEntity>>
 
+    @Query("SELECT * FROM blocked_numbers")
+    suspend fun getAllBlockedNumbersOnce(): List<BlockedNumberEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertBlockedNumber(entity: BlockedNumberEntity)
 
@@ -28,6 +31,9 @@ interface NovaCallDao {
 
     @Query("SELECT * FROM call_notes ORDER BY hasReminder DESC, updatedAt DESC")
     fun observeCallNotes(): Flow<List<CallNoteEntity>>
+
+    @Query("SELECT * FROM call_notes")
+    suspend fun getAllCallNotesOnce(): List<CallNoteEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCallNote(entity: CallNoteEntity)

@@ -10,6 +10,7 @@ import com.example.data.model.AppLanguage
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
+import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
 import kotlinx.coroutines.flow.Flow
@@ -93,11 +94,20 @@ class DialerRepository(
     suspend fun updateBrilliantAutoFormatBd(enabled: Boolean) = preferencesRepository.updateBrilliantAutoFormatBd(enabled)
     suspend fun updateBrilliantAutoCopy(enabled: Boolean) = preferencesRepository.updateBrilliantAutoCopy(enabled)
     suspend fun updateBrilliantSmartPrefixes(prefixes: String) = preferencesRepository.updateBrilliantSmartPrefixes(prefixes)
+    suspend fun updateBrilliantExternalHandoff(enabled: Boolean) = preferencesRepository.updateBrilliantExternalHandoff(enabled)
     suspend fun updateDefaultRoute(route: DefaultRoutePreference) = preferencesRepository.updateDefaultRoute(route)
     suspend fun updateSimAlias(slotIndex: Int, alias: String) = preferencesRepository.updateSimAlias(slotIndex, alias)
     suspend fun updateDtmfSound(enabled: Boolean) = preferencesRepository.updateDtmfSound(enabled)
+    suspend fun updateKeypadSoundStyle(style: KeypadSoundStyle) = preferencesRepository.updateKeypadSoundStyle(style)
+    suspend fun updateKeypadSoundVolume(volume: Float) = preferencesRepository.updateKeypadSoundVolume(volume)
     suspend fun updateHaptic(enabled: Boolean) = preferencesRepository.updateHaptic(enabled)
     suspend fun updateDarkTheme(enabled: Boolean) = preferencesRepository.updateDarkTheme(enabled)
     suspend fun updateLanguage(language: AppLanguage) = preferencesRepository.updateLanguage(language)
+    suspend fun updateNotifyIncoming(enabled: Boolean) = preferencesRepository.updateNotifyIncoming(enabled)
+    suspend fun updateNotifyMissed(enabled: Boolean) = preferencesRepository.updateNotifyMissed(enabled)
+    suspend fun updateNotifyOngoing(enabled: Boolean) = preferencesRepository.updateNotifyOngoing(enabled)
+    suspend fun updateVibrateOnRing(enabled: Boolean) = preferencesRepository.updateVibrateOnRing(enabled)
+    suspend fun updateAutoRejectBlocked(enabled: Boolean) = preferencesRepository.updateAutoRejectBlocked(enabled)
+    suspend fun updateAutoSpeaker(enabled: Boolean) = preferencesRepository.updateAutoSpeaker(enabled)
     suspend fun updateQuickReplies(replies: List<String>) = preferencesRepository.updateQuickReplies(replies)
 }

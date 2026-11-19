@@ -94,7 +94,7 @@ data class NovaStrings(
 
 fun novaStrings(language: AppLanguage): NovaStrings = when (language) {
     AppLanguage.BENGALI -> NovaStrings(
-        appName = "NovaCall",
+        appName = "Shajamal",
         tabKeypad = "ডায়াল",
         tabRecents = "সাম্প্রতিক",
         tabContacts = "কন্টাক্ট",
@@ -184,7 +184,7 @@ fun novaStrings(language: AppLanguage): NovaStrings = when (language) {
     )
 
     AppLanguage.ENGLISH -> NovaStrings(
-        appName = "NovaCall",
+        appName = "Shajamal",
         tabKeypad = "Keypad",
         tabRecents = "Recents",
         tabContacts = "Contacts",

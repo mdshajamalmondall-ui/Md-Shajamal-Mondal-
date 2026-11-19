@@ -1,0 +1,121 @@
+{
+  "entities": {
+    "UserCloudProfile": {
+      "title": "UserCloudProfile",
+      "description": "Authenticated user's private Caller ID preferences and opt-in community sync stats.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name for the user profile (1-80 chars)."
+        },
+        "callerIdEnabled": {
+          "type": "boolean",
+          "description": "Whether live cloud Caller ID lookup is enabled."
+        },
+        "communityShareEnabled": {
+          "type": "boolean",
+          "description": "Whether the user opted in to share contact names with the NovaCall community directory."
+        },
+        "sharedContactCount": {
+          "type": "integer",
+          "description": "Number of contact names synced by this user (0-5000)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "callerIdEnabled",
+        "communityShareEnabled",
+        "sharedContactCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CallerDirectoryEntry": {
+      "title": "CallerDirectoryEntry",
+      "description": "Shared community Caller ID record keyed by canonical normalized phone digits (e.g., 8801712345678).",
+      "type": "object",
+      "properties": {
+        "phoneKey": {
+          "type": "string",
+          "description": "Canonical digits-only phone key (4-15 digits) matching document ID."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Community-identified caller name (1-80 chars)."
+        },
+        "carrierLabel": {
+          "type": "string",
+          "description": "Detected carrier or region label (0-60 chars)."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["PERSONAL", "BUSINESS", "DELIVERY", "SPAM", "SCAM"],
+          "description": "Caller classification tag."
+        },
+        "spamReports": {
+          "type": "integer",
+          "description": "Count of spam reports for this number."
+        },
+        "reportCount": {
+          "type": "integer",
+          "description": "Total community verifications/tags for this number."
+        },
+        "contributedByUid": {
+          "type": "string",
+          "description": "UID of the user who originally contributed this entry."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "phoneKey",
+        "displayName",
+        "carrierLabel",
+        "category",
+        "spamReports",
+        "reportCount",
+        "contributedByUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserCloudProfile"
+      },
+      "description": "Private user settings and opt-in Caller ID sync profile, restricted to owner UID."
+    },
+    "/caller_directory/{phoneKey}": {
+      "schema": {
+        "$ref": "#/entities/CallerDirectoryEntry"
+      },
+      "description": "Community Caller ID directory supporting exact phone-key lookup and authenticated contributions."
+    }
+  }
+}

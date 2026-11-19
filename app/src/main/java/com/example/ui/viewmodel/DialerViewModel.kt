@@ -2,9 +2,22 @@ package com.example.ui.viewmodel
 
 import android.Manifest
 import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import android.content.Intent
+import android.os.Build
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.R
 import com.example.data.DialerRepository
+import com.example.data.cloud.CallerCategory
+import com.example.data.cloud.CallerDirectoryEntry
+import com.example.data.cloud.CallerIdIntelligence
+import com.example.data.cloud.CallerIdLookupResult
+import com.example.data.cloud.CallerIdRepository
+import com.example.data.cloud.UserCloudProfile
 import com.example.data.local.AppCallRecordEntity
 import com.example.data.local.BlockedNumberEntity
 import com.example.data.local.CallNoteEntity
@@ -21,16 +34,24 @@ import com.example.data.model.CallLogItem
 import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.DeviceContact
+import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SimCardInfo
 import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
+import com.example.data.telephony.CallNotificationHelper
 import com.example.data.telephony.TelephonyBridgeManager
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -46,7 +67,8 @@ data class PermissionSnapshot(
     val hasCallPhone: Boolean = false,
     val hasReadPhoneState: Boolean = false,
     val hasReadContacts: Boolean = false,
-    val hasReadCallLog: Boolean = false
+    val hasReadCallLog: Boolean = false,
+    val hasPostNotifications: Boolean = true
 ) {
     val allGranted: Boolean
         get() = hasCallPhone && hasReadPhoneState && hasReadContacts && hasReadCallLog
@@ -58,8 +80,19 @@ data class CallerDetailTarget(
     val name: String?
 )
 
+data class CloudCallerIdSnapshot(
+    val profile: UserCloudProfile? = null,
+    val myTags: List<CallerDirectoryEntry> = emptyList(),
+    val dialedLookup: CallerIdLookupResult? = null,
+    val isLookingUp: Boolean = false,
+    val isSyncingContacts: Boolean = false,
+    val errorMessage: String? = null
+)
+
 data class DialerUiState(
     val activeTab: NovaTab = NovaTab.KEYPAD,
+    val isSettingsOpen: Boolean = false,
+    val isDefaultDialer: Boolean = false,
     val dialedDigits: String = "",
     val contactSearchQuery: String = "",
     val recentsFilter: CallFilterType = CallFilterType.ALL,
@@ -81,7 +114,8 @@ data class DialerUiState(
     val todayCallCount: Int = 0,
     val selectedCallerDetail: CallerDetailTarget? = null,
     val routePickerTarget: CallerDetailTarget? = null,
-    val isLoadingSystemData: Boolean = false
+    val isLoadingSystemData: Boolean = false,
+    val cloudCallerId: CloudCallerIdSnapshot = CloudCallerIdSnapshot()
 ) {
     val sim1: SimCardInfo
         get() = simCards.firstOrNull { it.slotIndex == 0 }
@@ -107,6 +141,7 @@ private data class LocalRoomSnapshot(
 
 private data class SystemDataSnapshot(
     val permissions: PermissionSnapshot,
+    val isDefaultDialer: Boolean,
     val simCards: List<SimCardInfo>,
     val brilliantStatus: BrilliantBridgeStatus,
     val contacts: List<DeviceContact>,
@@ -116,6 +151,7 @@ private data class SystemDataSnapshot(
 
 private data class UiInputSnapshot(
     val activeTab: NovaTab,
+    val isSettingsOpen: Boolean,
     val dialedDigits: String,
     val contactSearchQuery: String,
     val recentsFilter: CallFilterType,
@@ -123,23 +159,32 @@ private data class UiInputSnapshot(
     val routePickerTarget: CallerDetailTarget?
 )
 
-class DialerViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val database = NovaCallDatabase.getInstance(application)
-    private val prefsRepo = PreferencesRepository(application)
-    private val repository = DialerRepository(database.novaCallDao(), prefsRepo)
-    private val telephony = TelephonyBridgeManager(application)
+class DialerViewModel(
+    private val repository: DialerRepository,
+    private val telephony: TelephonyBridgeManager,
+    private val callerIdRepository: CallerIdRepository,
+    private val currentUserId: String,
+    private val userDisplayNameHint: String
+) : ViewModel() {
 
     private val activeTab = MutableStateFlow(NovaTab.KEYPAD)
+    private val isSettingsOpen = MutableStateFlow(false)
     private val dialedDigits = MutableStateFlow("")
     private val contactSearchQuery = MutableStateFlow("")
     private val recentsFilter = MutableStateFlow(CallFilterType.ALL)
     private val selectedCallerDetail = MutableStateFlow<CallerDetailTarget?>(null)
     private val routePickerTarget = MutableStateFlow<CallerDetailTarget?>(null)
 
+    private val dialedLookupResult = MutableStateFlow<CallerIdLookupResult?>(null)
+    private val isLookingUpCallerId = MutableStateFlow(false)
+    private val isSyncingCommunityContacts = MutableStateFlow(false)
+    private val cloudErrorMessage = MutableStateFlow<String?>(null)
+    private var lookupJob: Job? = null
+
     private val systemSnapshot = MutableStateFlow(
         SystemDataSnapshot(
             permissions = currentPermissions(),
+            isDefaultDialer = telephony.isDefaultDialer(),
             simCards = emptyList(),
             brilliantStatus = BrilliantBridgeStatus(),
             contacts = emptyList(),
@@ -150,6 +195,47 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _events = MutableSharedFlow<DialerUiEvent>(extraBufferCapacity = 8)
     val events: SharedFlow<DialerUiEvent> = _events.asSharedFlow()
+
+    private val cloudProfileFlow: StateFlow<UserCloudProfile?> = callerIdRepository
+        .observeUserProfile(currentUserId)
+        .catch { error ->
+            val firestoreError = generateSequence(error) { it.cause }
+                .filterIsInstance<FirebaseFirestoreException>()
+                .firstOrNull()
+            if (firestoreError == null && error is CancellationException) throw error
+            Log.w(TAG, "Error observing user cloud profile", firestoreError ?: error)
+            cloudErrorMessage.value = (firestoreError ?: error).localizedMessage
+            emit(null)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
+
+    private val myTagsFlow: StateFlow<List<CallerDirectoryEntry>> = callerIdRepository
+        .observeMyContributedTags(currentUserId)
+        .catch { error ->
+            val firestoreError = generateSequence(error) { it.cause }
+                .filterIsInstance<FirebaseFirestoreException>()
+                .firstOrNull()
+            if (firestoreError == null && error is CancellationException) throw error
+            Log.w(TAG, "Error observing contributed caller tags", firestoreError ?: error)
+            emit(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), emptyList())
+
+    private val cloudSnapshotFlow = combine(
+        cloudProfileFlow,
+        myTagsFlow,
+        dialedLookupResult,
+        combine(isLookingUpCallerId, isSyncingCommunityContacts, cloudErrorMessage) { l, s, e -> Triple(l, s, e) }
+    ) { profile, tags, lookup, flags ->
+        CloudCallerIdSnapshot(
+            profile = profile,
+            myTags = tags,
+            dialedLookup = lookup,
+            isLookingUp = flags.first,
+            isSyncingContacts = flags.second,
+            errorMessage = flags.third
+        )
+    }
 
     private val roomSnapshotFlow = combine(
         repository.speedDials,
@@ -162,20 +248,21 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private val uiInputFlow = combine(
-        activeTab,
+        combine(activeTab, isSettingsOpen) { t, s -> t to s },
         dialedDigits,
         contactSearchQuery,
         recentsFilter,
         combine(selectedCallerDetail, routePickerTarget) { d, r -> d to r }
-    ) { tab, digits, query, filter, overlays ->
-        UiInputSnapshot(tab, digits, query, filter, overlays.first, overlays.second)
+    ) { nav, digits, query, filter, overlays ->
+        UiInputSnapshot(nav.first, nav.second, digits, query, filter, overlays.first, overlays.second)
     }
 
     val uiState: StateFlow<DialerUiState> = combine(
         roomSnapshotFlow,
         systemSnapshot,
-        uiInputFlow
-    ) { room, sys, input ->
+        uiInputFlow,
+        cloudSnapshotFlow
+    ) { room, sys, input, cloud ->
         val mergedLogs = mergeCallLogs(
             systemLogs = sys.systemCallLogs,
             localRecords = room.appCallRecords,
@@ -207,6 +294,8 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
 
         DialerUiState(
             activeTab = input.activeTab,
+            isSettingsOpen = input.isSettingsOpen,
+            isDefaultDialer = sys.isDefaultDialer,
             dialedDigits = input.dialedDigits,
             contactSearchQuery = input.contactSearchQuery,
             recentsFilter = input.recentsFilter,
@@ -228,7 +317,8 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
             todayCallCount = todayCount,
             selectedCallerDetail = input.selectedCallerDetail,
             routePickerTarget = input.routePickerTarget,
-            isLoadingSystemData = sys.isLoading
+            isLoadingSystemData = sys.isLoading,
+            cloudCallerId = cloud
         )
     }.stateIn(
         scope = viewModelScope,
@@ -239,6 +329,9 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
     init {
         refreshSystemData()
         viewModelScope.launch {
+            callerIdRepository.ensureUserProfile(userDisplayNameHint)
+        }
+        viewModelScope.launch {
             repository.preferences.collect { prefs ->
                 refreshBridgeAndSims(prefs)
             }
@@ -246,6 +339,7 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        lookupJob?.cancel()
         telephony.releaseToneGenerator()
         super.onCleared()
     }
@@ -254,13 +348,21 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
         hasCallPhone = telephony.hasPermission(Manifest.permission.CALL_PHONE),
         hasReadPhoneState = telephony.hasPermission(Manifest.permission.READ_PHONE_STATE),
         hasReadContacts = telephony.hasPermission(Manifest.permission.READ_CONTACTS),
-        hasReadCallLog = telephony.hasPermission(Manifest.permission.READ_CALL_LOG)
+        hasReadCallLog = telephony.hasPermission(Manifest.permission.READ_CALL_LOG),
+        hasPostNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            telephony.hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+        } else true
     )
 
     fun refreshSystemData() {
         viewModelScope.launch {
             val perms = currentPermissions()
-            systemSnapshot.value = systemSnapshot.value.copy(permissions = perms, isLoading = true)
+            val isDef = telephony.isDefaultDialer()
+            systemSnapshot.value = systemSnapshot.value.copy(
+                permissions = perms,
+                isDefaultDialer = isDef,
+                isLoading = true
+            )
             val prefs = uiState.value.preferences
             val sims = telephony.loadSimCards(prefs)
             val brilliant = telephony.inspectBrilliantBridge(prefs.brilliantPackageName)
@@ -268,6 +370,7 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
             val logs = telephony.loadSystemCallLogs()
             systemSnapshot.value = SystemDataSnapshot(
                 permissions = perms,
+                isDefaultDialer = isDef,
                 simCards = sims,
                 brilliantStatus = brilliant,
                 contacts = contacts,
@@ -283,13 +386,124 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
             val brilliant = telephony.inspectBrilliantBridge(prefs.brilliantPackageName)
             systemSnapshot.value = systemSnapshot.value.copy(
                 permissions = currentPermissions(),
+                isDefaultDialer = telephony.isDefaultDialer(),
                 simCards = sims,
                 brilliantStatus = brilliant
             )
         }
     }
 
+    private fun triggerLiveCallerIdLookup(rawInput: String) {
+        lookupJob?.cancel()
+        val digitsOnly = rawInput.filter { it.isDigit() }
+        if (digitsOnly.length < 3) {
+            dialedLookupResult.value = null
+            isLookingUpCallerId.value = false
+            return
+        }
+
+        // If already saved in device contacts, no need for unknown caller cloud lookup
+        val localMatch = resolveContactName(rawInput, systemSnapshot.value.contacts)
+        if (!localMatch.isNullOrBlank()) {
+            dialedLookupResult.value = null
+            isLookingUpCallerId.value = false
+            return
+        }
+
+        // Show instant offline carrier / verified BD service info immediately
+        dialedLookupResult.value = CallerIdIntelligence.detectOffline(rawInput)
+
+        val callerIdEnabled = cloudProfileFlow.value?.callerIdEnabled ?: true
+        if (!callerIdEnabled || digitsOnly.length < 4) {
+            isLookingUpCallerId.value = false
+            return
+        }
+
+        lookupJob = viewModelScope.launch {
+            delay(320L)
+            isLookingUpCallerId.value = true
+            val result = callerIdRepository.lookupNumber(rawInput)
+            if (dialedDigits.value.filter { it.isDigit() } == digitsOnly) {
+                dialedLookupResult.value = result
+            }
+            isLookingUpCallerId.value = false
+        }
+    }
+
+    fun publishCallerTag(number: String, name: String, category: CallerCategory) {
+        viewModelScope.launch {
+            val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+            val res = callerIdRepository.publishCallerTag(number, name, category)
+            res.onSuccess { published ->
+                if (dialedDigits.value.isNotBlank()) {
+                    dialedLookupResult.value = published
+                }
+                emitMessage(
+                    if (isBn) "কলার আইডি সেভ হয়েছে: ${published.displayName}"
+                    else "Caller ID published: ${published.displayName}"
+                )
+            }.onFailure { err ->
+                emitMessage(
+                    if (isBn) "কলার আইডি সেভ করা যায়নি: ${err.localizedMessage.orEmpty()}"
+                    else "Failed to save Caller ID: ${err.localizedMessage.orEmpty()}"
+                )
+            }
+        }
+    }
+
+    fun toggleCloudCallerIdEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            callerIdRepository.updateCloudCallerIdSettings(callerIdEnabled = enabled)
+            if (!enabled) {
+                dialedLookupResult.value = null
+            } else if (dialedDigits.value.length >= 4) {
+                triggerLiveCallerIdLookup(dialedDigits.value)
+            }
+        }
+    }
+
+    fun syncContactsToCommunityCallerId() {
+        viewModelScope.launch {
+            val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+            val contacts = systemSnapshot.value.contacts
+            if (contacts.isEmpty()) {
+                emitMessage(
+                    if (isBn) "কন্টাক্ট পারমিশন দিন অথবা আগে ফোনে কন্টাক্ট সেভ করুন"
+                    else "Grant Contacts permission first to sync names"
+                )
+                return@launch
+            }
+            isSyncingCommunityContacts.value = true
+            val res = callerIdRepository.syncOptInContacts(contacts)
+            isSyncingCommunityContacts.value = false
+            res.onSuccess { added ->
+                emitMessage(
+                    if (isBn) "কমিউনিটি কলার আইডিতে $added টি নতুন নম্বর যুক্ত হয়েছে!"
+                    else "Synced $added new contacts to Community Caller ID!"
+                )
+            }.onFailure { err ->
+                emitMessage(
+                    if (isBn) "সিঙ্ক ব্যর্থ হয়েছে: ${err.localizedMessage.orEmpty()}"
+                    else "Sync failed: ${err.localizedMessage.orEmpty()}"
+                )
+            }
+        }
+    }
+
+    fun createRequestDefaultDialerIntent(): Intent? = telephony.createRequestDefaultDialerIntent()
+
+    fun openAppNotificationSettings() = telephony.openAppNotificationSettings()
+
+    fun openSettings() {
+        isSettingsOpen.value = true
+    }
+
+    fun closeSettings() {
+        isSettingsOpen.value = false
+    }
+
     fun selectTab(tab: NovaTab) {
+        isSettingsOpen.value = false
         activeTab.value = tab
     }
 
@@ -297,32 +511,46 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
         val clean = normalizePhoneNumber(rawNumber)
         if (clean.isNotEmpty()) {
             dialedDigits.value = clean
+            isSettingsOpen.value = false
             activeTab.value = NovaTab.KEYPAD
+            triggerLiveCallerIdLookup(clean)
         }
     }
 
     fun onDialDigitPress(symbol: String) {
         if (dialedDigits.value.length < 24) {
             dialedDigits.value += symbol
+            triggerLiveCallerIdLookup(dialedDigits.value)
         }
-        if (uiState.value.preferences.dtmfSoundEnabled) {
-            telephony.playDtmfTone(symbol)
+        val prefs = uiState.value.preferences
+        if (prefs.dtmfSoundEnabled) {
+            telephony.playDialpadSound(symbol, prefs.keypadSoundStyle, prefs.keypadSoundVolume)
         }
+    }
+
+    fun previewKeypadSound(style: KeypadSoundStyle = uiState.value.preferences.keypadSoundStyle) {
+        telephony.playDialpadSound("5", style, uiState.value.preferences.keypadSoundVolume)
     }
 
     fun onDialBackspace() {
         if (dialedDigits.value.isNotEmpty()) {
             dialedDigits.value = dialedDigits.value.dropLast(1)
+            triggerLiveCallerIdLookup(dialedDigits.value)
         }
     }
 
     fun onDialClear() {
         dialedDigits.value = ""
+        dialedLookupResult.value = null
+        isLookingUpCallerId.value = false
+        lookupJob?.cancel()
     }
 
     fun setDialedNumber(number: String) {
         dialedDigits.value = number.trim()
+        isSettingsOpen.value = false
         activeTab.value = NovaTab.KEYPAD
+        triggerLiveCallerIdLookup(dialedDigits.value)
     }
 
     fun onDialDigitLongPress(symbol: String) {
@@ -377,42 +605,29 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
         routePickerTarget.value = null
     }
 
-    fun triggerDefaultOrPickCall(number: String, contactName: String? = null) {
-        val state = uiState.value
-        val trimmed = number.trim()
-        if (trimmed.isEmpty()) {
-            val lastOutgoing = state.callLogs.firstOrNull()?.number
-            if (!lastOutgoing.isNullOrBlank()) {
-                dialedDigits.value = lastOutgoing
-            }
-            return
-        }
-        when (state.preferences.defaultRoute) {
-            DefaultRoutePreference.ASK -> openRoutePicker(trimmed, contactName)
-            DefaultRoutePreference.SIM_1 -> placeCall(trimmed, CallRoute.SIM_1, contactName)
-            DefaultRoutePreference.SIM_2 -> placeCall(trimmed, CallRoute.SIM_2, contactName)
-            DefaultRoutePreference.BRILLIANT -> placeCall(trimmed, CallRoute.BRILLIANT, contactName)
-        }
-    }
-
     fun placeCall(rawNumber: String, route: CallRoute, contactName: String? = null) {
         val state = uiState.value
         val numberToCall = rawNumber.trim().ifEmpty {
             val last = state.callLogs.firstOrNull()?.number.orEmpty()
             if (last.isNotEmpty()) {
                 dialedDigits.value = last
+                triggerLiveCallerIdLookup(last)
             }
             return
         }
 
-        val resolvedName = contactName ?: resolveContactName(numberToCall, state.contacts)
+        val resolvedName = contactName
+            ?: resolveContactName(numberToCall, state.contacts)
+            ?: state.cloudCallerId.dialedLookup?.displayName
+
         val result = when (route) {
             CallRoute.SIM_1 -> telephony.placeSimCall(numberToCall, state.sim1)
             CallRoute.SIM_2 -> telephony.placeSimCall(numberToCall, state.sim2)
             CallRoute.BRILLIANT -> telephony.placeBrilliantCall(
                 rawNumber = numberToCall,
                 bridgeStatus = state.brilliantStatus,
-                prefs = state.preferences
+                prefs = state.preferences,
+                fallbackSim = state.sim1
             )
         }
 
@@ -521,10 +736,6 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { repository.deleteCallNote(normalizedNumber) }
     }
 
-    fun clearLocalCallRecords() {
-        viewModelScope.launch { repository.clearLocalCallRecords() }
-    }
-
     fun updateBrilliantPackage(pkg: String) = viewModelScope.launch {
         repository.updateBrilliantPackage(pkg.ifBlank { BrilliantBridgeStatus.DEFAULT_BRILLIANT_PACKAGE })
     }
@@ -545,6 +756,10 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
         repository.updateBrilliantSmartPrefixes(prefixes)
     }
 
+    fun updateBrilliantExternalHandoff(enabled: Boolean) = viewModelScope.launch {
+        repository.updateBrilliantExternalHandoff(enabled)
+    }
+
     fun updateDefaultRoute(route: DefaultRoutePreference) = viewModelScope.launch {
         repository.updateDefaultRoute(route)
     }
@@ -555,6 +770,16 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updateDtmfSound(enabled: Boolean) = viewModelScope.launch {
         repository.updateDtmfSound(enabled)
+        if (enabled) previewKeypadSound()
+    }
+
+    fun updateKeypadSoundStyle(style: KeypadSoundStyle) = viewModelScope.launch {
+        repository.updateKeypadSoundStyle(style)
+        previewKeypadSound(style)
+    }
+
+    fun updateKeypadSoundVolume(volume: Float) = viewModelScope.launch {
+        repository.updateKeypadSoundVolume(volume)
     }
 
     fun updateHaptic(enabled: Boolean) = viewModelScope.launch {
@@ -567,6 +792,30 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updateLanguage(language: AppLanguage) = viewModelScope.launch {
         repository.updateLanguage(language)
+    }
+
+    fun updateNotifyIncoming(enabled: Boolean) = viewModelScope.launch {
+        repository.updateNotifyIncoming(enabled)
+    }
+
+    fun updateNotifyMissed(enabled: Boolean) = viewModelScope.launch {
+        repository.updateNotifyMissed(enabled)
+    }
+
+    fun updateNotifyOngoing(enabled: Boolean) = viewModelScope.launch {
+        repository.updateNotifyOngoing(enabled)
+    }
+
+    fun updateVibrateOnRing(enabled: Boolean) = viewModelScope.launch {
+        repository.updateVibrateOnRing(enabled)
+    }
+
+    fun updateAutoRejectBlocked(enabled: Boolean) = viewModelScope.launch {
+        repository.updateAutoRejectBlocked(enabled)
+    }
+
+    fun updateAutoSpeaker(enabled: Boolean) = viewModelScope.launch {
+        repository.updateAutoSpeaker(enabled)
     }
 
     fun addQuickReply(template: String) = viewModelScope.launch {
@@ -614,7 +863,6 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
                 isLocalNovaRecord = true
             )
         }
-        // Keep local records that aren't immediate duplicates of system outgoing logs within 15s (always preserve BRILLIANT records)
         val filteredLocal = localMapped.filter { local ->
             if (local.route == CallRoute.BRILLIANT) return@filter true
             systemLogs.none { sys ->
@@ -672,5 +920,33 @@ class DialerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         return sb.toString()
+    }
+
+    companion object {
+        private const val TAG = "DialerVM"
+
+        fun factory(
+            application: Application,
+            currentUserId: String,
+            userDisplayNameHint: String
+        ): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                CallNotificationHelper.ensureChannels(application)
+                val databaseId = application.getString(R.string.firestore_database_id)
+                val firestore = FirebaseFirestore.getInstance(databaseId)
+                val callerIdRepo = CallerIdRepository(db = firestore)
+                val roomDb = NovaCallDatabase.getInstance(application)
+                val prefsRepo = PreferencesRepository(application)
+                val dialerRepo = DialerRepository(roomDb.novaCallDao(), prefsRepo)
+                val telephony = TelephonyBridgeManager(application)
+                DialerViewModel(
+                    repository = dialerRepo,
+                    telephony = telephony,
+                    callerIdRepository = callerIdRepo,
+                    currentUserId = currentUserId,
+                    userDisplayNameHint = userDisplayNameHint
+                )
+            }
+        }
     }
 }

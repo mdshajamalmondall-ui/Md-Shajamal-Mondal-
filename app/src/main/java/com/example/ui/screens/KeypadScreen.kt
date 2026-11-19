@@ -33,10 +33,17 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.StickyNote2
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,7 +66,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.cloud.CallerIdSource
 import com.example.data.local.SpeedDialEntity
+import com.example.data.model.AppLanguage
 import com.example.data.model.CallRoute
 import com.example.data.model.DeviceContact
 import com.example.data.model.formatDisplayNumber
@@ -113,12 +122,16 @@ fun KeypadScreen(
     onCopyNumber: (String) -> Unit,
     onOpenNoteDialog: (String, String?) -> Unit,
     onOpenBridgeTab: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onRequestDefaultDialer: () -> Unit,
+    onOpenTagCaller: (String, String?) -> Unit,
     onSelectT9Contact: (DeviceContact) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val nova = LocalNovaColors.current
     val haptic = LocalHapticFeedback.current
     val speedDialMap = state.speedDials.associateBy { it.digit }
+    val isBn = state.preferences.language == AppLanguage.BENGALI
 
     Box(
         modifier = modifier
@@ -156,35 +169,96 @@ fun KeypadScreen(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Luxury Brand + Bridge Status Strip
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = strings.appName,
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+            // Top Luxury Brand + Bridge Status + Settings Gear
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = strings.appName,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            SimMiniDot(label = state.sim1.displayName, color = nova.sim1)
+                            Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                            SimMiniDot(label = state.sim2.displayName, color = nova.sim2)
+                        }
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        SimMiniDot(label = state.sim1.displayName, color = nova.sim1)
-                        Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                        SimMiniDot(label = state.sim2.displayName, color = nova.sim2)
+                        BrilliantStatusPill(
+                            status = state.brilliantStatus,
+                            strings = strings,
+                            onClick = onOpenBridgeTab
+                        )
+                        Surface(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onOpenSettings)
+                                .testTag("open_settings_button"),
+                            shape = CircleShape,
+                            color = nova.glassSurface,
+                            border = BorderStroke(1.dp, nova.glassBorder)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Settings,
+                                    contentDescription = stringResource(R.string.cd_settings),
+                                    tint = nova.gold,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
-                BrilliantStatusPill(
-                    status = state.brilliantStatus,
-                    strings = strings,
-                    onClick = onOpenBridgeTab
-                )
+
+                // Compact 1-tap banner to make NovaCall the Default Phone App for in-app outgoing & incoming calls
+                AnimatedVisibility(visible = !state.isDefaultDialer && state.dialedDigits.isEmpty()) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable(onClick = onRequestDefaultDialer)
+                            .testTag("keypad_default_dialer_banner"),
+                        shape = RoundedCornerShape(14.dp),
+                        color = nova.goldContainer.copy(alpha = 0.78f),
+                        border = BorderStroke(1.dp, nova.gold.copy(alpha = 0.55f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PhoneAndroid,
+                                contentDescription = null,
+                                tint = nova.gold,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = if (isBn) "ইনকামিং ও আউটগোয়িং কল এই অ্যাপে রাখতে ট্যাপ করে ডিফল্ট ফোন করুন"
+                                else "Tap to set Shajamal as Default Phone for in-app calls",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
             }
 
             // Intelligence & T9 Smart Match Zone
@@ -272,6 +346,116 @@ fun KeypadScreen(
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+                        }
+                    }
+                }
+
+                // Live Truecaller-style Unknown Number Caller ID Card
+                val lookup = state.cloudCallerId.dialedLookup
+                AnimatedVisibility(
+                    visible = state.dialedDigits.length >= 3 && (lookup != null || state.cloudCallerId.isLookingUp),
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    val isSpam = lookup?.isSpam == true
+                    val hasName = !lookup?.displayName.isNullOrBlank()
+                    val accent = when {
+                        isSpam -> nova.missed
+                        hasName -> nova.sim1
+                        else -> nova.gold
+                    }
+                    val container = when {
+                        isSpam -> nova.missedContainer.copy(alpha = 0.85f)
+                        hasName -> nova.sim1Container.copy(alpha = 0.8f)
+                        else -> nova.glassSurface
+                    }
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onOpenTagCaller(state.dialedDigits, lookup?.displayName) }
+                            .testTag("dialpad_caller_id_banner"),
+                        shape = RoundedCornerShape(16.dp),
+                        color = container,
+                        border = BorderStroke(1.dp, accent.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (state.cloudCallerId.isLookingUp) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = accent
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (isSpam) Icons.Filled.ReportProblem else Icons.Filled.VerifiedUser,
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = when {
+                                        hasName -> lookup!!.displayName!!
+                                        state.cloudCallerId.isLookingUp -> if (isBn) "কলার আইডি খোঁজা হচ্ছে..." else "Searching Caller ID..."
+                                        else -> if (isBn) "অচেনা নম্বর" else "Unknown Number"
+                                    },
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isSpam) nova.missed else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                val subtitleText = buildString {
+                                    lookup?.carrierOrRegion?.takeIf { it.isNotBlank() }?.let { append(it) }
+                                    if (isSpam) {
+                                        if (isNotEmpty()) append(" • ")
+                                        append(if (isBn) "স্প্যাম রিপোর্ট (${lookup?.spamReports ?: 1})" else "Spam (${lookup?.spamReports ?: 1})")
+                                    } else if (lookup?.source == CallerIdSource.COMMUNITY_CLOUD) {
+                                        if (isNotEmpty()) append(" • ")
+                                        append("Shajamal Caller ID")
+                                    } else if (lookup?.source == CallerIdSource.SERVICE_DIRECTORY) {
+                                        if (isNotEmpty()) append(" • ")
+                                        append(if (isBn) "ভেরিফায়েড সার্ভিস" else "Verified Service")
+                                    }
+                                }
+                                if (subtitleText.isNotBlank()) {
+                                    Text(
+                                        text = subtitleText,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = accent.copy(alpha = 0.16f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = null,
+                                        tint = accent,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Text(
+                                        text = if (hasName) (if (isBn) "আপডেট" else "Edit") else (if (isBn) "নাম দিন" else "Tag"),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = accent
+                                    )
+                                }
+                            }
                         }
                     }
                 }
