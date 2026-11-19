@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">NovaCall</string>
+    <string name="nav_keypad">ডায়াল</string>
+    <string name="nav_recents">সাম্প্রতিক</string>
+    <string name="nav_contacts">কন্টাক্ট</string>
+    <string name="nav_tools">ব্রিলিয়ান্ট ও টুলস</string>
+    <string name="sim_one_default">SIM 1</string>
+    <string name="sim_two_default">SIM 2</string>
+    <string name="brilliant_label">ব্রিলিয়ান্ট</string>
+    <string name="cd_backspace">মুছুন</string>
+    <string name="cd_call_sim1">সিম ১ দিয়ে কল করুন</string>
+    <string name="cd_call_sim2">সিম ২ দিয়ে কল করুন</string>
+    <string name="cd_call_brilliant">ব্রিলিয়ান্ট কানেক্ট দিয়ে কল করুন</string>
+    <string name="cd_add_contact">নতুন কন্টাক্ট সেভ করুন</string>
+    <string name="cd_whatsapp_chat">হোয়াটসঅ্যাপে মেসেজ করুন</string>
+    <string name="cd_search">খুঁজুন</string>
+    <string name="cd_settings">সেটিংস</string>
+</resources>
