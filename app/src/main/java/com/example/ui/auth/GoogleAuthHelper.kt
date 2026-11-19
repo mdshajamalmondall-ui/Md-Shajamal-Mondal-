@@ -7,8 +7,8 @@ import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import android.annotation.SuppressLint
 import androidx.credentials.exceptions.GetCredentialCancellationException
-import com.example.R
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -48,9 +48,7 @@ fun attemptAutoSignIn(
         onAuthSuccess()
         return
     }
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (_: Exception) {
+    val clientId = resolveDefaultWebClientId(context) ?: run {
         onUnauthenticated()
         return
     }
@@ -92,9 +90,7 @@ fun onGoogleSignInClicked(
     scope: CoroutineScope,
     onAuthCancelled: () -> Unit = {}
 ) {
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (_: Exception) {
+    val clientId = resolveDefaultWebClientId(context) ?: run {
         onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
         return
     }
@@ -143,3 +139,18 @@ fun signOutFromNovaCall(
         }
     }
 }
+
+@SuppressLint("DiscouragedApi")
+private fun resolveDefaultWebClientId(context: Context): String? {
+    return try {
+        val resId = context.resources.getIdentifier(
+            "default_web_client_id",
+            "string",
+            context.packageName
+        )
+        if (resId == 0) null else context.getString(resId).takeIf { it.isNotBlank() }
+    } catch (_: Exception) {
+        null
+    }
+}
+

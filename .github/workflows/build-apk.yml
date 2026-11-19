@@ -21,14 +21,21 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Accept Android SDK licenses
+      - name: Accept Android SDK licenses and install SDK 36.1
         shell: bash
         run: |
           set +o pipefail
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          SDKMANAGER=$(find "$SDK_ROOT" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)
+          if [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          else
+            SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)
+          fi
+          echo "Using SDK_ROOT=$SDK_ROOT"
+          echo "Using SDKMANAGER=$SDKMANAGER"
           if [ -n "$SDKMANAGER" ]; then
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            yes | "$SDKMANAGER" --install "platforms;android-36.1" "build-tools;36.0.0" "platform-tools" || true
           fi
 
       - name: Install Gradle 9.3.1
@@ -38,10 +45,15 @@ jobs:
           echo "/tmp/gradle-9.3.1/bin" >> "$GITHUB_PATH"
 
       - name: Ensure debug.keystore exists
+        shell: bash
         run: |
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-          elif [ ! -f debug.keystore ]; then
+          if [ ! -f debug.keystore ] && [ -s debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore || rm -f debug.keystore
+            if [ -f debug.keystore ]; then
+              keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1 || rm -f debug.keystore
+            fi
+          fi
+          if [ ! -f debug.keystore ]; then
             keytool -genkeypair -v \
               -keystore debug.keystore \
               -storepass android \
@@ -52,9 +64,16 @@ jobs:
               -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
+          echo "google-services.json present: $([ -f app/google-services.json ] && echo yes || echo no)"
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        run: |
+          gradle :app:assembleDebug \
+            --no-daemon \
+            --no-configuration-cache \
+            --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" \
+            --stacktrace
 
       - name: Prepare Shajamal.apk
         run: cp app/build/outputs/apk/debug/app-debug.apk Shajamal.apk
@@ -64,7 +83,6 @@ jobs:
         with:
           name: Shajamal-APK
           path: Shajamal.apk
-          archive: false
           retention-days: 30
 
       - name: Publish Direct Download Release
