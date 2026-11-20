@@ -428,15 +428,6 @@ fun NovaCallApp(
                                         onCheckSimBalance = viewModel::checkSimBalance,
                                         onSaveSimBalanceUssd = viewModel::updateSimBalanceUssd,
                                         defaultUssdForSlot = viewModel::defaultBalanceUssdForSlot,
-                                        onSaveIccConfig = viewModel::saveIccSipConfig,
-                                        onTestIccSipServer = viewModel::testIccSipServer,
-                                        onOpenSipCallingAccounts = viewModel::openSipCallingAccountsSettings,
-                                        onRefreshIspStatus = viewModel::refreshIspNetworkStatus,
-                                        onOpenWebUrl = viewModel::openWebUrl,
-                                        onCallHelpline = { helpline ->
-                                            viewModel.openRoutePicker(helpline, "ICC 24/7 Helpline")
-                                        },
-                                        onSelectDisplayThemeMode = viewModel::updateDisplayThemeMode,
                                         onSelectThemePalette = viewModel::updateThemePalette,
                                         onSelectBackgroundDoodle = viewModel::updateBackgroundDoodle,
                                         onPickRingtone = launchRingtonePicker,

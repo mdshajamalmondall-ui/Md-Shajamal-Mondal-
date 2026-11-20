@@ -48,27 +48,12 @@ import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.CallRoute
 import com.example.ui.i18n.NovaStrings
-import com.example.ui.theme.AmethystBg
-import com.example.ui.theme.AmethystPrimary
-import com.example.ui.theme.ChampagneGold
-import com.example.ui.theme.CrimsonBg
-import com.example.ui.theme.CrimsonPrimary
-import com.example.ui.theme.CyberIndigoBg
-import com.example.ui.theme.CyberIndigoPrimary
-import com.example.ui.theme.EmeraldBg
-import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.GoldLightPrimary
 import com.example.ui.theme.LocalNovaColors
-import com.example.ui.theme.MidnightRoseBg
-import com.example.ui.theme.MidnightRosePrimary
-import com.example.ui.theme.MintBg
-import com.example.ui.theme.MintLightPrimary
 import com.example.ui.theme.ObsidianBg
-import com.example.ui.theme.OceanBg
-import com.example.ui.theme.OceanPrimary
-import com.example.ui.theme.PearlBg
-import com.example.ui.theme.SunsetBg
-import com.example.ui.theme.SunsetPrimary
+import com.example.ui.theme.PureBlackBg
+import com.example.ui.theme.PureBlackPrimary
+import com.example.ui.theme.SapphireOceanPrimary
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -291,16 +276,9 @@ fun ThemePalettePicker(
     val nova = LocalNovaColors.current
     val isBn = language == AppLanguage.BENGALI
     val options = listOf(
-        ThemeSwatchSpec(AppThemePalette.ROYAL_SAPPHIRE, "রয়েল নীল", "Sapphire", ObsidianBg, ChampagneGold),
-        ThemeSwatchSpec(AppThemePalette.EMERALD_FOREST, "সবুজ ফরেস্ট", "Emerald", EmeraldBg, EmeraldPrimary),
-        ThemeSwatchSpec(AppThemePalette.ROYAL_AMETHYST, "রয়েল বেগুনি", "Amethyst", AmethystBg, AmethystPrimary),
-        ThemeSwatchSpec(AppThemePalette.OCEAN_TEAL, "ওশান টিল", "Ocean", OceanBg, OceanPrimary),
-        ThemeSwatchSpec(AppThemePalette.CRIMSON_VELVET, "মেরুন ভেলভেট", "Crimson", CrimsonBg, CrimsonPrimary),
-        ThemeSwatchSpec(AppThemePalette.SUNSET_AMBER, "সানসেট গোল্ড", "Sunset", SunsetBg, SunsetPrimary),
-        ThemeSwatchSpec(AppThemePalette.MIDNIGHT_ROSE, "রোজ পিঙ্ক", "Rose", MidnightRoseBg, MidnightRosePrimary),
-        ThemeSwatchSpec(AppThemePalette.CYBER_INDIGO, "ইন্ডিগো নিয়ন", "Indigo", CyberIndigoBg, CyberIndigoPrimary),
-        ThemeSwatchSpec(AppThemePalette.PEARL_WHITE, "পার্ল হোয়াইট", "Pearl", PearlBg, GoldLightPrimary),
-        ThemeSwatchSpec(AppThemePalette.MINT_BREEZE, "মিন্ট ব্রিজ", "Mint", MintBg, MintLightPrimary)
+        ThemeSwatchSpec(AppThemePalette.PURE_BLACK, "ব্ল্যাক (Black)", "Black", PureBlackBg, PureBlackPrimary),
+        ThemeSwatchSpec(AppThemePalette.PEARL_WHITE, "হোয়াইট (White)", "White", Color.White, GoldLightPrimary),
+        ThemeSwatchSpec(AppThemePalette.ROYAL_SAPPHIRE, "স্যাফায়ার ওশান", "Sapphire Ocean", ObsidianBg, SapphireOceanPrimary)
     )
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -315,7 +293,7 @@ fun ThemePalettePicker(
                 modifier = Modifier.size(18.dp)
             )
             Text(
-                text = if (isBn) "অ্যাপের ব্যাকগ্রাউন্ড কালার" else "App Background Color",
+                text = if (isBn) "থিম কালার (ব্ল্যাক / হোয়াইট / স্যাফায়ার ওশান)" else "Theme Color (Black / White / Sapphire Ocean)",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onSurface
             )

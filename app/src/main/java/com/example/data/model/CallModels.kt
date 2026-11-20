@@ -54,6 +54,7 @@ enum class AppLanguage {
 }
 
 enum class AppThemePalette {
+    PURE_BLACK,
     ROYAL_SAPPHIRE,
     EMERALD_FOREST,
     ROYAL_AMETHYST,
@@ -75,7 +76,13 @@ enum class BackgroundDoodleStyle {
     COSMIC_STARS,
     FLORAL_LEAVES,
     GEOMETRIC_WAVES,
-    HEARTS_SPARKLE
+    HEARTS_SPARKLE,
+    ISLAMIC_MANDALA,
+    CYBER_CIRCUIT,
+    OCEAN_RIPPLES,
+    MUSIC_BEATS,
+    BUTTERFLY_BREEZE,
+    AURORA_MOUNTAINS
 }
 
 enum class DisplayThemeMode {

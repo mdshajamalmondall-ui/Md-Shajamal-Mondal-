@@ -134,10 +134,11 @@ jobs:
 
           Latest updates:
           - Recents Tap -> Call History (N) Bottom Sheet: Tap any grouped number to view full call history (Outgoing/Incoming/Missed, SIM/Carrier, date/time, duration, single-entry delete), Call Now, Edit Number, and Block/Unblock
-          - Keypad 'Call with' Bottom Sheet: Tap the primary Call button to choose SIM 1, SIM 2, or ICC IP Calling (SIP)
-          - Recents 3-Dot (⋮) Menu & Filter Chips: Quick Call button + 3-dot menu (Call history, Edit in keypad, Block, Delete History) and All / Missed / SIP VoIP / Cellular SIM filters
-          - SIM 1 & SIM 2 Balance Check (live USSD) + ICC Communication IP Calling (SIP) & ISP Status/Portal
-          - Streamlined Settings: Unified Theme & Doodle card (White/Black/System + 10 color themes + 6 doodles), Call Ringtone & Dialpad Tone picker, Notifications & Vibration, Block List, and Language"
+          - Keypad 'Call with' Bottom Sheet: Tap the primary Call button to choose SIM 1 or SIM 2
+          - Recents 3-Dot (⋮) Menu & Filter Chips: Quick Call button + 3-dot menu (Call history, Edit in keypad, Block, Delete History)
+          - Streamlined Themes: Clean Black, White, and Sapphire Ocean themes
+          - 11 Rich Doodle + Atmospheric Background Designs: Phone Doodle, Cosmic Stars, Floral Leaves, Geometric Waves, Hearts & Sparkle, Royal Mandala, Cyber Circuit, Ocean Ripples, Music Beats, Butterfly Breeze, and Aurora Peaks
+          - SIM 1 & SIM 2 Balance Check (live USSD), Call Ringtone & Dialpad Tone Picker, Notifications & Vibration, Block List, and Bengali/English Language"
 
           if gh release view latest-apk >/dev/null 2>&1; then
             gh release upload latest-apk Shajamal.apk --clobber

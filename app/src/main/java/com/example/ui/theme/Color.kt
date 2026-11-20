@@ -2,13 +2,25 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// 1. Royal Sapphire & Deep Ocean Palette (Default Dark)
-val ObsidianBg = Color(0xFF0D1B3E)
-val ObsidianSurface = Color(0xFF132652)
-val ObsidianSurfaceElevated = Color(0xFF1B336B)
-val ObsidianSurfaceHighest = Color(0xFF244182)
-val ObsidianOutline = Color(0xFF355496)
-val ObsidianOutlineSubtle = Color(0xFF223B72)
+// 1. Sapphire Ocean Palette (Deep Ocean Blue)
+val ObsidianBg = Color(0xFF0A1D3B)
+val ObsidianSurface = Color(0xFF10284F)
+val ObsidianSurfaceElevated = Color(0xFF173669)
+val ObsidianSurfaceHighest = Color(0xFF1F4685)
+val ObsidianOutline = Color(0xFF3360A8)
+val ObsidianOutlineSubtle = Color(0xFF1F4075)
+val SapphireOceanPrimary = Color(0xFF56CCF2)
+val SapphireOceanContainer = Color(0xFF133A63)
+
+// 1B. Pure Black Palette (True AMOLED Black)
+val PureBlackBg = Color(0xFF030406)
+val PureBlackSurface = Color(0xFF0B0D12)
+val PureBlackSurfaceElevated = Color(0xFF141821)
+val PureBlackSurfaceHighest = Color(0xFF1E2430)
+val PureBlackOutline = Color(0xFF2E3748)
+val PureBlackOutlineSubtle = Color(0xFF1B202B)
+val PureBlackPrimary = Color(0xFFE8B86D)
+val PureBlackPrimaryContainer = Color(0xFF2B2214)
 
 // 2. Emerald Forest Palette (Deep Rich Green)
 val EmeraldBg = Color(0xFF072620)

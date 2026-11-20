@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -32,22 +31,14 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Router
-import androidx.compose.material.icons.filled.SettingsPhone
 import androidx.compose.material.icons.filled.SimCard
-import androidx.compose.material.icons.filled.SupportAgent
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,15 +63,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.BackgroundDoodleStyle
-import com.example.data.model.DisplayThemeMode
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.formatDisplayNumber
 import com.example.ui.components.DoodleStylePicker
@@ -101,13 +88,6 @@ fun SettingsScreen(
     onCheckSimBalance: (Int) -> Unit,
     onSaveSimBalanceUssd: (Int, String) -> Unit,
     defaultUssdForSlot: (Int) -> String,
-    onSaveIccConfig: (Boolean, String, Int, String, String, String) -> Unit,
-    onTestIccSipServer: (String, Int) -> Unit,
-    onOpenSipCallingAccounts: () -> Unit,
-    onRefreshIspStatus: () -> Unit,
-    onOpenWebUrl: (String) -> Unit,
-    onCallHelpline: (String) -> Unit,
-    onSelectDisplayThemeMode: (DisplayThemeMode) -> Unit,
     onSelectThemePalette: (AppThemePalette) -> Unit,
     onSelectBackgroundDoodle: (BackgroundDoodleStyle) -> Unit,
     onPickRingtone: () -> Unit,
@@ -137,14 +117,6 @@ fun SettingsScreen(
     var sim2UssdInput by remember(state.preferences.sim2BalanceUssd, state.sim2.carrierName) {
         mutableStateOf(state.preferences.sim2BalanceUssd.ifBlank { defaultUssdForSlot(1) })
     }
-
-    var iccEnabled by remember(state.preferences.iccSipEnabled) { mutableStateOf(state.preferences.iccSipEnabled) }
-    var iccServer by remember(state.preferences.iccSipServer) { mutableStateOf(state.preferences.iccSipServer) }
-    var iccPort by remember(state.preferences.iccSipPort) { mutableStateOf(state.preferences.iccSipPort.toString()) }
-    var iccUsername by remember(state.preferences.iccSipUsername) { mutableStateOf(state.preferences.iccSipUsername) }
-    var iccPassword by remember(state.preferences.iccSipPassword) { mutableStateOf(state.preferences.iccSipPassword) }
-    var iccCustomerId by remember(state.preferences.iccIspCustomerId) { mutableStateOf(state.preferences.iccIspCustomerId) }
-    var showIccPassword by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -339,318 +311,13 @@ fun SettingsScreen(
                     }
                 }
 
-                // 3. ICC Communication IP Calling (SIP) & ISP
-                item(key = "icc_communication") {
-                    SettingsSectionCard(
-                        title = if (isBn) "ICC Communication (IP কলিং ও ISP)" else "ICC Communication (IP Calling & ISP)",
-                        icon = Icons.Filled.Router,
-                        iconTint = nova.brilliant
-                    ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "ICC IP কলিং (SIP) চালু করুন" else "Enable ICC IP Calling (SIP)",
-                            subtitle = if (isBn) {
-                                "চালু করলে ডায়ালপ্যাডের 'কল উইথ' অপশনে SIM 1 ও SIM 2 এর সাথে ICC IP কলিংও দেখাবে।"
-                            } else {
-                                "Shows ICC IP Calling (SIP) alongside SIM 1 & SIM 2 in the 'Call with' chooser."
-                            },
-                            checked = iccEnabled,
-                            onCheckedChange = { checked ->
-                                iccEnabled = checked
-                                val parsedPort = iccPort.toIntOrNull() ?: 5060
-                                onSaveIccConfig(checked, iccServer, parsedPort, iccUsername, iccPassword, iccCustomerId)
-                            },
-                            tag = "switch_icc_sip_enabled"
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = iccServer,
-                                onValueChange = { iccServer = it },
-                                label = { Text(if (isBn) "SIP সার্ভার" else "SIP Server") },
-                                placeholder = { Text("sip.icc.com.bd") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(1.7f)
-                                    .testTag("icc_sip_server_input")
-                            )
-                            OutlinedTextField(
-                                value = iccPort,
-                                onValueChange = { iccPort = it.filter { ch -> ch.isDigit() }.take(5) },
-                                label = { Text(if (isBn) "পোর্ট" else "Port") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier
-                                    .weight(0.9f)
-                                    .testTag("icc_sip_port_input")
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedTextField(
-                            value = iccUsername,
-                            onValueChange = { iccUsername = it },
-                            label = { Text(if (isBn) "ICC IP নম্বর / ইউজারনেম" else "ICC IP Number / Username") },
-                            placeholder = { Text("096XXXXXXXX") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("icc_sip_username_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedTextField(
-                            value = iccPassword,
-                            onValueChange = { iccPassword = it },
-                            label = { Text(if (isBn) "SIP পাসওয়ার্ড" else "SIP Password") },
-                            singleLine = true,
-                            visualTransformation = if (showIccPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                IconButton(onClick = { showIccPassword = !showIccPassword }) {
-                                    Icon(
-                                        imageVector = if (showIccPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                        contentDescription = if (showIccPassword) "Hide password" else "Show password"
-                                    )
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("icc_sip_password_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedTextField(
-                            value = iccCustomerId,
-                            onValueChange = { iccCustomerId = it },
-                            label = { Text(if (isBn) "ICC ISP কাস্টমার আইডি (ঐচ্ছিক)" else "ICC ISP Customer ID (Optional)") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("icc_isp_customer_id_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    val parsedPort = iccPort.toIntOrNull() ?: 5060
-                                    onSaveIccConfig(iccEnabled, iccServer, parsedPort, iccUsername, iccPassword, iccCustomerId)
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("save_icc_config_button"),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = nova.brilliant,
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Text(if (isBn) "সেভ করুন" else "Save", style = MaterialTheme.typography.labelLarge)
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    val parsedPort = iccPort.toIntOrNull() ?: 5060
-                                    onTestIccSipServer(iccServer, parsedPort)
-                                },
-                                enabled = !state.isTestingIccSip,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("test_icc_sip_button"),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                if (state.isTestingIccSip) {
-                                    CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Filled.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isBn) "সার্ভার টেস্ট" else "Test Server", style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-
-                        state.iccSipStatusText?.let { sipStatus ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = nova.brilliantContainer.copy(alpha = 0.55f),
-                                border = BorderStroke(0.8.dp, nova.brilliant.copy(alpha = 0.45f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = sipStatus,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.padding(10.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedButton(
-                            onClick = onOpenSipCallingAccounts,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("open_sip_calling_accounts_button"),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Filled.SettingsPhone, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isBn) "ফোনের SIP কলিং অ্যাকাউন্টস খুলুন" else "Open Phone SIP Calling Accounts",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = nova.glassBorder.copy(alpha = 0.55f)
-                        )
-
-                        // ICC ISP Live Network Status & Portal
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (isBn) "ICC ISP লাইভ নেটওয়ার্ক" else "ICC ISP Live Network",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            OutlinedButton(
-                                onClick = onRefreshIspStatus,
-                                enabled = !state.isCheckingIsp,
-                                modifier = Modifier.testTag("check_isp_status_button"),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                if (state.isCheckingIsp) {
-                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(15.dp))
-                                }
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(if (isBn) "ISP চেক" else "Check ISP", style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-
-                        state.ispNetworkStatus?.let { isp ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isp.isIccNetwork) nova.sim1 else nova.glassBorder.copy(alpha = 0.6f)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Text(
-                                        text = "${isp.ispName}${if (isp.isIccNetwork) " ✓ (ICC)" else ""}",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = if (isp.isIccNetwork) nova.sim1 else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "${if (isBn) "পাবলিক IP" else "Public IP"}: ${isp.publicIp} • ${isp.connectionType}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    val speedLine = buildString {
-                                        if (isp.city.isNotBlank()) {
-                                            append(isp.city)
-                                            append(" • ")
-                                        }
-                                        append("↓ ${isp.downstreamMbps} Mbps / ↑ ${isp.upstreamMbps} Mbps")
-                                    }
-                                    Text(
-                                        text = speedLine,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = nova.sim2
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                onClick = { onOpenWebUrl("https://icc.com.bd") },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("open_icc_portal_button"),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isBn) "ICC পোর্টাল" else "ICC Portal", style = MaterialTheme.typography.labelMedium)
-                            }
-                            OutlinedButton(
-                                onClick = { onCallHelpline("09611677677") },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("call_icc_helpline_button"),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Filled.SupportAgent, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isBn) "২৪/৭ হেল্পলাইন" else "24/7 Helpline", style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-                    }
-                }
-
-                // 4. Unified Theme & Doodle Card (White / Black / System + 10 Color Themes + 6 Doodles)
+                // 3. Unified Theme & Doodle Card (Black / White / Sapphire Ocean + All Doodles with Backgrounds)
                 item(key = "theme_and_doodle") {
                     SettingsSectionCard(
                         title = if (isBn) "থিম ও থিম ডুডল" else "Theme & Theme Doodle",
                         icon = Icons.Filled.Palette,
                         iconTint = nova.gold
                     ) {
-                        Text(
-                            text = if (isBn) "ডিসপ্লে মোড (সাদা / কালো / সিস্টেম)" else "Display Mode (White / Black / System)",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        val themeModes = listOf(
-                            DisplayThemeMode.LIGHT to (if (isBn) "সাদা (White)" else "White"),
-                            DisplayThemeMode.DARK to (if (isBn) "কালো (Black)" else "Black"),
-                            DisplayThemeMode.SYSTEM to (if (isBn) "সিস্টেম" else "System")
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            themeModes.forEach { (mode, label) ->
-                                FilterChip(
-                                    selected = state.preferences.displayThemeMode == mode,
-                                    onClick = { onSelectDisplayThemeMode(mode) },
-                                    modifier = Modifier.testTag("display_theme_${mode.name.lowercase()}"),
-                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = nova.sim1Container,
-                                        selectedLabelColor = nova.sim1
-                                    )
-                                )
-                            }
-                        }
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = nova.glassBorder.copy(alpha = 0.55f)
-                        )
-
                         ThemePalettePicker(
                             selectedPalette = state.preferences.themePalette,
                             language = state.preferences.language,

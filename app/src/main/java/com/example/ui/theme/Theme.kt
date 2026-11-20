@@ -59,7 +59,8 @@ private fun buildDarkExtended(surfaceElevated: Color, outline: Color, goldAccent
         isDark = true
     )
 
-private val SapphireExtendedColors = buildDarkExtended(ObsidianSurfaceElevated, ObsidianOutline)
+private val PureBlackExtendedColors = buildDarkExtended(PureBlackSurfaceElevated, PureBlackOutline, PureBlackPrimary)
+private val SapphireExtendedColors = buildDarkExtended(ObsidianSurfaceElevated, ObsidianOutline, SapphireOceanPrimary)
 private val EmeraldExtendedColors = buildDarkExtended(EmeraldSurfaceElevated, EmeraldOutline, EmeraldPrimary)
 private val AmethystExtendedColors = buildDarkExtended(AmethystSurfaceElevated, AmethystOutline, AmethystPrimary)
 private val OceanExtendedColors = buildDarkExtended(OceanSurfaceElevated, OceanOutline, OceanPrimary)
@@ -135,9 +136,20 @@ private fun buildDarkScheme(
     onErrorContainer = Color(0xFFFFD9DD)
 )
 
+private val PureBlackColorScheme = buildDarkScheme(
+    primary = PureBlackPrimary,
+    primaryContainer = PureBlackPrimaryContainer,
+    bg = PureBlackBg,
+    surface = PureBlackSurface,
+    surfaceElevated = PureBlackSurfaceElevated,
+    surfaceHighest = PureBlackSurfaceHighest,
+    outline = PureBlackOutline,
+    outlineSubtle = PureBlackOutlineSubtle
+)
+
 private val SapphireColorScheme = buildDarkScheme(
-    primary = ChampagneGold,
-    primaryContainer = ChampagneGoldContainer,
+    primary = SapphireOceanPrimary,
+    primaryContainer = SapphireOceanContainer,
     bg = ObsidianBg,
     surface = ObsidianSurface,
     surfaceElevated = ObsidianSurfaceElevated,
@@ -308,6 +320,7 @@ fun NovaCallTheme(
     val isDark = !resolvedPalette.isLightPalette
 
     val colorScheme = when (resolvedPalette) {
+        AppThemePalette.PURE_BLACK -> PureBlackColorScheme
         AppThemePalette.ROYAL_SAPPHIRE -> SapphireColorScheme
         AppThemePalette.EMERALD_FOREST -> EmeraldColorScheme
         AppThemePalette.ROYAL_AMETHYST -> AmethystColorScheme
@@ -320,6 +333,7 @@ fun NovaCallTheme(
         AppThemePalette.MINT_BREEZE -> MintLightColorScheme
     }
     val extendedColors = when (resolvedPalette) {
+        AppThemePalette.PURE_BLACK -> PureBlackExtendedColors
         AppThemePalette.ROYAL_SAPPHIRE -> SapphireExtendedColors
         AppThemePalette.EMERALD_FOREST -> EmeraldExtendedColors
         AppThemePalette.ROYAL_AMETHYST -> AmethystExtendedColors
