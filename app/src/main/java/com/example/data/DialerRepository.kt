@@ -128,4 +128,14 @@ class DialerRepository(
     suspend fun updateIncomingCallDisplayStyle(style: IncomingCallDisplayStyle) = preferencesRepository.updateIncomingCallDisplayStyle(style)
     suspend fun updateSlideToAnswerMode(mode: SlideToAnswerMode) = preferencesRepository.updateSlideToAnswerMode(mode)
     suspend fun updateFavoriteNumbers(numbers: Set<String>) = preferencesRepository.updateFavoriteNumbers(numbers)
+    suspend fun updateSimBalanceUssd(slotIndex: Int, ussdCode: String) = preferencesRepository.updateSimBalanceUssd(slotIndex, ussdCode)
+    suspend fun updateCustomRingtone(uri: String, title: String) = preferencesRepository.updateCustomRingtone(uri, title)
+    suspend fun updateIccSipConfig(
+        enabled: Boolean,
+        server: String,
+        port: Int,
+        username: String,
+        password: String,
+        ispCustomerId: String
+    ) = preferencesRepository.updateIccSipConfig(enabled, server, port, username, password, ispCustomerId)
 }

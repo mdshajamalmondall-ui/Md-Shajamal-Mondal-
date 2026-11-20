@@ -21,26 +21,28 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.SettingsPhone
 import androidx.compose.material.icons.filled.SimCard
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.SupportAgent
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,7 +61,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,29 +70,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.BackgroundDoodleStyle
-import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.DisplayThemeMode
-import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
-import com.example.data.model.SlideToAnswerMode
-import com.example.data.telephony.CallRecorderManager
+import com.example.data.model.formatDisplayNumber
 import com.example.ui.components.DoodleStylePicker
 import com.example.ui.components.ThemePalettePicker
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
 import com.example.ui.viewmodel.DialerUiState
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -102,55 +98,53 @@ fun SettingsScreen(
     onRequestDefaultDialer: () -> Unit,
     onOpenAppInfoSettings: () -> Unit,
     onOpenSystemDefaultApps: () -> Unit,
-    onRequestPermissions: () -> Unit,
+    onCheckSimBalance: (Int) -> Unit,
+    onSaveSimBalanceUssd: (Int, String) -> Unit,
+    defaultUssdForSlot: (Int) -> String,
+    onSaveIccConfig: (Boolean, String, Int, String, String, String) -> Unit,
+    onTestIccSipServer: (String, Int) -> Unit,
+    onOpenSipCallingAccounts: () -> Unit,
+    onRefreshIspStatus: () -> Unit,
+    onOpenWebUrl: (String) -> Unit,
+    onCallHelpline: (String) -> Unit,
+    onSelectDisplayThemeMode: (DisplayThemeMode) -> Unit,
+    onSelectThemePalette: (AppThemePalette) -> Unit,
+    onSelectBackgroundDoodle: (BackgroundDoodleStyle) -> Unit,
+    onPickRingtone: () -> Unit,
+    onOpenSystemSoundSettings: () -> Unit,
+    onToggleDtmfSound: (Boolean) -> Unit,
+    onSelectSoundStyle: (KeypadSoundStyle) -> Unit,
+    onChangeSoundVolume: (Float) -> Unit,
+    onPreviewSound: () -> Unit,
     onOpenSystemNotificationSettings: () -> Unit,
     onToggleNotifyIncoming: (Boolean) -> Unit,
     onToggleNotifyMissed: (Boolean) -> Unit,
     onToggleNotifyOngoing: (Boolean) -> Unit,
     onToggleVibrateOnRing: (Boolean) -> Unit,
+    onToggleHaptic: (Boolean) -> Unit,
     onToggleAutoRejectBlocked: (Boolean) -> Unit,
     onOpenAddBlockDialog: () -> Unit,
     onUnblockNumber: (String) -> Unit,
-    onToggleDtmfSound: (Boolean) -> Unit,
-    onSelectSoundStyle: (KeypadSoundStyle) -> Unit,
-    onChangeSoundVolume: (Float) -> Unit,
-    onPreviewSound: () -> Unit,
-    onToggleHaptic: (Boolean) -> Unit,
-    onToggleAutoSpeaker: (Boolean) -> Unit,
-    onUpdateDefaultRoute: (DefaultRoutePreference) -> Unit,
-    onUpdateSimAlias: (Int, String) -> Unit,
-    onAddQuickReply: (String) -> Unit,
-    onRemoveQuickReply: (String) -> Unit,
-    onToggleDarkTheme: (Boolean) -> Unit,
-    onSelectThemePalette: (AppThemePalette) -> Unit,
-    onSelectBackgroundDoodle: (BackgroundDoodleStyle) -> Unit,
-    onToggleLiquidGlass: (Boolean) -> Unit,
-    onSelectDisplayThemeMode: (DisplayThemeMode) -> Unit,
-    onSelectFontScale: (AppFontScale) -> Unit,
-    onSelectIncomingCallStyle: (IncomingCallDisplayStyle) -> Unit,
-    onSelectSlideToAnswerMode: (SlideToAnswerMode) -> Unit,
     onToggleLanguage: (AppLanguage) -> Unit,
-    signedInEmail: String?,
-    onToggleCloudCallerId: (Boolean) -> Unit,
-    onSyncCommunityContacts: () -> Unit,
-    onOpenTagCallerDialog: () -> Unit,
-    onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val nova = LocalNovaColors.current
     val isBn = state.preferences.language == AppLanguage.BENGALI
-    var sim1Input by remember(state.preferences.sim1Alias) { mutableStateOf(state.preferences.sim1Alias) }
-    var sim2Input by remember(state.preferences.sim2Alias) { mutableStateOf(state.preferences.sim2Alias) }
-    var newReply by remember { mutableStateOf("") }
-    var recordings by remember { mutableStateOf(CallRecorderManager.listRecordings(context)) }
-    var playingRecordingPath by remember { mutableStateOf<String?>(null) }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            CallRecorderManager.stopPlayback()
-        }
+    var sim1UssdInput by remember(state.preferences.sim1BalanceUssd, state.sim1.carrierName) {
+        mutableStateOf(state.preferences.sim1BalanceUssd.ifBlank { defaultUssdForSlot(0) })
     }
+    var sim2UssdInput by remember(state.preferences.sim2BalanceUssd, state.sim2.carrierName) {
+        mutableStateOf(state.preferences.sim2BalanceUssd.ifBlank { defaultUssdForSlot(1) })
+    }
+
+    var iccEnabled by remember(state.preferences.iccSipEnabled) { mutableStateOf(state.preferences.iccSipEnabled) }
+    var iccServer by remember(state.preferences.iccSipServer) { mutableStateOf(state.preferences.iccSipServer) }
+    var iccPort by remember(state.preferences.iccSipPort) { mutableStateOf(state.preferences.iccSipPort.toString()) }
+    var iccUsername by remember(state.preferences.iccSipUsername) { mutableStateOf(state.preferences.iccSipUsername) }
+    var iccPassword by remember(state.preferences.iccSipPassword) { mutableStateOf(state.preferences.iccSipPassword) }
+    var iccCustomerId by remember(state.preferences.iccIspCustomerId) { mutableStateOf(state.preferences.iccIspCustomerId) }
+    var showIccPassword by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -193,124 +187,93 @@ fun SettingsScreen(
                     .fillMaxSize()
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp)
+                contentPadding = PaddingValues(top = 4.dp, bottom = 36.dp)
             ) {
-                // 1. Default Phone App (Mandatory for In-App Incoming & Outgoing Calls!)
-                item {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("default_dialer_settings_card"),
-                        shape = RoundedCornerShape(22.dp),
-                        color = if (state.isDefaultDialer) nova.sim1Container.copy(alpha = 0.7f) else nova.goldContainer.copy(alpha = 0.75f),
-                        border = BorderStroke(
-                            1.2.dp,
-                            if (state.isDefaultDialer) nova.sim1 else nova.gold
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(CircleShape)
-                                        .background(if (state.isDefaultDialer) nova.sim1.copy(alpha = 0.2f) else nova.gold.copy(alpha = 0.2f)),
-                                    contentAlignment = Alignment.Center
+                // 1. Default Phone App (Shown ONLY when Shajamal is not yet the default dialer)
+                if (!state.isDefaultDialer) {
+                    item(key = "default_dialer") {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("default_dialer_settings_card"),
+                            shape = RoundedCornerShape(22.dp),
+                            color = nova.goldContainer.copy(alpha = 0.78f),
+                            border = BorderStroke(1.2.dp, nova.gold)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = if (state.isDefaultDialer) Icons.Filled.CheckCircle else Icons.Filled.PhoneAndroid,
-                                        contentDescription = null,
-                                        tint = if (state.isDefaultDialer) nova.sim1 else nova.gold,
-                                        modifier = Modifier.size(22.dp)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(nova.gold.copy(alpha = 0.22f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.PhoneAndroid,
+                                            contentDescription = null,
+                                            tint = nova.gold,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isBn) "ডিফল্ট ফোন অ্যাপ সেট করুন" else "Set as Default Phone App",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (isBn) {
+                                                "সব ইনকামিং ও আউটগোয়িং কল সরাসরি Shajamal-এ আনতে এটি অন করুন।"
+                                            } else {
+                                                "Enable so all incoming and outgoing calls stay directly inside Shajamal."
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (state.isDefaultDialer) {
-                                            if (isBn) "ডিফল্ট ফোন অ্যাপ সক্রিয় ✓" else "Default Phone App Active ✓"
-                                        } else {
-                                            if (isBn) "ডিফল্ট ফোন অ্যাপ সেট করুন" else "Set as Default Phone App"
-                                        },
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = if (isBn) {
-                                            "এটি অন করলে আউটগোয়িং ও ইনকামিং সব কল সরাসরি Shajamal-এই আসবে এবং অন্য কোনো ফোন অ্যাপে যাবে না।"
-                                        } else {
-                                            "Enable this so all outgoing and incoming calls stay directly inside Shajamal instead of switching to another dialer."
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            if (!state.isDefaultDialer) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(
                                     onClick = onRequestDefaultDialer,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .testTag("set_default_dialer_button"),
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    )
+                                    shape = RoundedCornerShape(14.dp)
                                 ) {
                                     Text(
                                         text = if (isBn) "Shajamal-কে ডিফল্ট ফোন অ্যাপ করুন" else "Make Shajamal Default Dialer",
                                         style = MaterialTheme.typography.labelLarge
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
-                                    border = BorderStroke(1.dp, nova.glassBorder)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = onOpenAppInfoSettings,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("open_app_info_restricted_button"),
+                                        shape = RoundedCornerShape(12.dp)
                                     ) {
                                         Text(
-                                            text = if (isBn) {
-                                                "যদি 'App was denied access' দেখায় (Android 14/15):\n১) নিচের 'App Info (অনুমতি)' বাটনে চাপুন\n২) উপরের ডান কোনায় তিন ডট (⋮) মেনু থেকে 'Allow restricted settings' চালু করুন\n৩) ফিরে এসে আবার 'ডিফল্ট ফোন অ্যাপ করুন' চাপুন"
-                                            } else {
-                                                "If Android shows 'App was denied access':\n1) Tap 'App Info (Unlock)' below\n2) Tap the top-right 3-dot (⋮) menu -> 'Allow restricted settings'\n3) Return here and tap 'Make Shajamal Default Dialer'"
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            text = if (isBn) "App Info" else "App Info",
+                                            style = MaterialTheme.typography.labelMedium
                                         )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            OutlinedButton(
-                                                onClick = onOpenAppInfoSettings,
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .testTag("open_app_info_restricted_button"),
-                                                shape = RoundedCornerShape(12.dp)
-                                            ) {
-                                                Text(
-                                                    text = if (isBn) "App Info (অনুমতি)" else "App Info (Unlock)",
-                                                    style = MaterialTheme.typography.labelMedium
-                                                )
-                                            }
-                                            OutlinedButton(
-                                                onClick = onOpenSystemDefaultApps,
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .testTag("open_system_default_apps_button"),
-                                                shape = RoundedCornerShape(12.dp)
-                                            ) {
-                                                Text(
-                                                    text = if (isBn) "Default Apps" else "Default Apps",
-                                                    style = MaterialTheme.typography.labelMedium
-                                                )
-                                            }
-                                        }
+                                    }
+                                    OutlinedButton(
+                                        onClick = onOpenSystemDefaultApps,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("open_system_default_apps_button"),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text(
+                                            text = "Default Apps",
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
                                     }
                                 }
                             }
@@ -318,50 +281,352 @@ fun SettingsScreen(
                     }
                 }
 
-                // 1A. Display Options (Liquid Glass, Display Theme, Font Size, Incoming Calls, Slide to Answer)
-                item {
+                // 2. SIM 1 & SIM 2 Balance Check (Real USSD)
+                item(key = "sim_balance") {
                     SettingsSectionCard(
-                        title = if (isBn) "ডিসপ্লে অপশন (Liquid Glass)" else "Display Options",
-                        icon = Icons.Filled.Tune,
-                        iconTint = nova.gold
+                        title = if (isBn) "SIM 1 ও SIM 2 ব্যালেন্স চেক" else "SIM 1 & SIM 2 Balance Check",
+                        icon = Icons.Filled.AccountBalanceWallet,
+                        iconTint = nova.sim1
                     ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "Liquid Glass ইফেক্ট" else "Liquid Glass",
-                            subtitle = if (isBn) {
-                                "কল স্ক্রিন ও বাটনে স্বচ্ছ গ্লাস ব্লার ইফেক্ট চালু রাখবে (কম র‍্যামের ফোনে বন্ধ রাখতে পারেন)।"
-                            } else {
-                                "Enable glass blur effect on call screen & controls; may impact performance on low-end devices."
-                            },
-                            checked = state.preferences.liquidGlassEnabled,
-                            onCheckedChange = onToggleLiquidGlass,
-                            tag = "switch_liquid_glass"
-                        )
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
-                        )
-
-                        // Display Theme (System / Light / Dark)
-                        Text(
-                            text = if (isBn) "ডিসপ্লে থিম (Display Theme)" else "Display Theme",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
                         Text(
                             text = if (isBn) {
-                                "লাইট, ডার্ক অথবা ফোনের সিস্টেম অনুযায়ী অটো থিম বেছে নিন।"
+                                "সিমের অপারেটর অনুযায়ী অটো USSD কোড সেট করা আছে। চাইলে নিজের কোড পরিবর্তন করে সরাসরি ব্যালেন্স চেক করুন।"
                             } else {
-                                "Choose Light, Dark, or System mode that adapts automatically to your device."
+                                "Carrier USSD codes are auto-detected. Customize the USSD code if needed and check live SIM balance."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        SimBalanceRow(
+                            slotIndex = 0,
+                            simTitle = "SIM 1",
+                            carrierName = state.sim1.displayName.ifBlank { state.sim1.carrierName },
+                            accent = nova.sim1,
+                            container = nova.sim1Container,
+                            ussdCode = sim1UssdInput,
+                            onUssdChange = { sim1UssdInput = it },
+                            onSaveUssd = { onSaveSimBalanceUssd(0, sim1UssdInput) },
+                            onCheckBalance = {
+                                onSaveSimBalanceUssd(0, sim1UssdInput)
+                                onCheckSimBalance(0)
+                            },
+                            isChecking = state.checkingBalanceSlot == 0,
+                            balanceResult = state.sim1BalanceText,
+                            isBn = isBn
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        SimBalanceRow(
+                            slotIndex = 1,
+                            simTitle = "SIM 2",
+                            carrierName = state.sim2.displayName.ifBlank { state.sim2.carrierName },
+                            accent = nova.sim2,
+                            container = nova.sim2Container,
+                            ussdCode = sim2UssdInput,
+                            onUssdChange = { sim2UssdInput = it },
+                            onSaveUssd = { onSaveSimBalanceUssd(1, sim2UssdInput) },
+                            onCheckBalance = {
+                                onSaveSimBalanceUssd(1, sim2UssdInput)
+                                onCheckSimBalance(1)
+                            },
+                            isChecking = state.checkingBalanceSlot == 1,
+                            balanceResult = state.sim2BalanceText,
+                            isBn = isBn
+                        )
+                    }
+                }
+
+                // 3. ICC Communication IP Calling (SIP) & ISP
+                item(key = "icc_communication") {
+                    SettingsSectionCard(
+                        title = if (isBn) "ICC Communication (IP কলিং ও ISP)" else "ICC Communication (IP Calling & ISP)",
+                        icon = Icons.Filled.Router,
+                        iconTint = nova.brilliant
+                    ) {
+                        SettingsSwitchRow(
+                            title = if (isBn) "ICC IP কলিং (SIP) চালু করুন" else "Enable ICC IP Calling (SIP)",
+                            subtitle = if (isBn) {
+                                "চালু করলে ডায়ালপ্যাডের 'কল উইথ' অপশনে SIM 1 ও SIM 2 এর সাথে ICC IP কলিংও দেখাবে।"
+                            } else {
+                                "Shows ICC IP Calling (SIP) alongside SIM 1 & SIM 2 in the 'Call with' chooser."
+                            },
+                            checked = iccEnabled,
+                            onCheckedChange = { checked ->
+                                iccEnabled = checked
+                                val parsedPort = iccPort.toIntOrNull() ?: 5060
+                                onSaveIccConfig(checked, iccServer, parsedPort, iccUsername, iccPassword, iccCustomerId)
+                            },
+                            tag = "switch_icc_sip_enabled"
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = iccServer,
+                                onValueChange = { iccServer = it },
+                                label = { Text(if (isBn) "SIP সার্ভার" else "SIP Server") },
+                                placeholder = { Text("sip.icc.com.bd") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1.7f)
+                                    .testTag("icc_sip_server_input")
+                            )
+                            OutlinedTextField(
+                                value = iccPort,
+                                onValueChange = { iccPort = it.filter { ch -> ch.isDigit() }.take(5) },
+                                label = { Text(if (isBn) "পোর্ট" else "Port") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier
+                                    .weight(0.9f)
+                                    .testTag("icc_sip_port_input")
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = iccUsername,
+                            onValueChange = { iccUsername = it },
+                            label = { Text(if (isBn) "ICC IP নম্বর / ইউজারনেম" else "ICC IP Number / Username") },
+                            placeholder = { Text("096XXXXXXXX") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("icc_sip_username_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = iccPassword,
+                            onValueChange = { iccPassword = it },
+                            label = { Text(if (isBn) "SIP পাসওয়ার্ড" else "SIP Password") },
+                            singleLine = true,
+                            visualTransformation = if (showIccPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { showIccPassword = !showIccPassword }) {
+                                    Icon(
+                                        imageVector = if (showIccPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = if (showIccPassword) "Hide password" else "Show password"
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("icc_sip_password_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = iccCustomerId,
+                            onValueChange = { iccCustomerId = it },
+                            label = { Text(if (isBn) "ICC ISP কাস্টমার আইডি (ঐচ্ছিক)" else "ICC ISP Customer ID (Optional)") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("icc_isp_customer_id_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    val parsedPort = iccPort.toIntOrNull() ?: 5060
+                                    onSaveIccConfig(iccEnabled, iccServer, parsedPort, iccUsername, iccPassword, iccCustomerId)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("save_icc_config_button"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = nova.brilliant,
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Text(if (isBn) "সেভ করুন" else "Save", style = MaterialTheme.typography.labelLarge)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val parsedPort = iccPort.toIntOrNull() ?: 5060
+                                    onTestIccSipServer(iccServer, parsedPort)
+                                },
+                                enabled = !state.isTestingIccSip,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("test_icc_sip_button"),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (state.isTestingIccSip) {
+                                    CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isBn) "সার্ভার টেস্ট" else "Test Server", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+
+                        state.iccSipStatusText?.let { sipStatus ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = nova.brilliantContainer.copy(alpha = 0.55f),
+                                border = BorderStroke(0.8.dp, nova.brilliant.copy(alpha = 0.45f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = sipStatus,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedButton(
+                            onClick = onOpenSipCallingAccounts,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("open_sip_calling_accounts_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Filled.SettingsPhone, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isBn) "ফোনের SIP কলিং অ্যাকাউন্টস খুলুন" else "Open Phone SIP Calling Accounts",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = nova.glassBorder.copy(alpha = 0.55f)
+                        )
+
+                        // ICC ISP Live Network Status & Portal
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isBn) "ICC ISP লাইভ নেটওয়ার্ক" else "ICC ISP Live Network",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            OutlinedButton(
+                                onClick = onRefreshIspStatus,
+                                enabled = !state.isCheckingIsp,
+                                modifier = Modifier.testTag("check_isp_status_button"),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                if (state.isCheckingIsp) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(15.dp))
+                                }
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(if (isBn) "ISP চেক" else "Check ISP", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+
+                        state.ispNetworkStatus?.let { isp ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isp.isIccNetwork) nova.sim1 else nova.glassBorder.copy(alpha = 0.6f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(
+                                        text = "${isp.ispName}${if (isp.isIccNetwork) " ✓ (ICC)" else ""}",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isp.isIccNetwork) nova.sim1 else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${if (isBn) "পাবলিক IP" else "Public IP"}: ${isp.publicIp} • ${isp.connectionType}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    val speedLine = buildString {
+                                        if (isp.city.isNotBlank()) {
+                                            append(isp.city)
+                                            append(" • ")
+                                        }
+                                        append("↓ ${isp.downstreamMbps} Mbps / ↑ ${isp.upstreamMbps} Mbps")
+                                    }
+                                    Text(
+                                        text = speedLine,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = nova.sim2
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { onOpenWebUrl("https://icc.com.bd") },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("open_icc_portal_button"),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isBn) "ICC পোর্টাল" else "ICC Portal", style = MaterialTheme.typography.labelMedium)
+                            }
+                            OutlinedButton(
+                                onClick = { onCallHelpline("09611677677") },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("call_icc_helpline_button"),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.SupportAgent, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isBn) "২৪/৭ হেল্পলাইন" else "24/7 Helpline", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                }
+
+                // 4. Unified Theme & Doodle Card (White / Black / System + 10 Color Themes + 6 Doodles)
+                item(key = "theme_and_doodle") {
+                    SettingsSectionCard(
+                        title = if (isBn) "থিম ও থিম ডুডল" else "Theme & Theme Doodle",
+                        icon = Icons.Filled.Palette,
+                        iconTint = nova.gold
+                    ) {
+                        Text(
+                            text = if (isBn) "ডিসপ্লে মোড (সাদা / কালো / সিস্টেম)" else "Display Mode (White / Black / System)",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
                         val themeModes = listOf(
-                            DisplayThemeMode.SYSTEM to (if (isBn) "সিস্টেম" else "System"),
-                            DisplayThemeMode.LIGHT to (if (isBn) "লাইট" else "Light"),
-                            DisplayThemeMode.DARK to (if (isBn) "ডার্ক" else "Dark")
+                            DisplayThemeMode.LIGHT to (if (isBn) "সাদা (White)" else "White"),
+                            DisplayThemeMode.DARK to (if (isBn) "কালো (Black)" else "Black"),
+                            DisplayThemeMode.SYSTEM to (if (isBn) "সিস্টেম" else "System")
                         )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -382,363 +647,300 @@ fun SettingsScreen(
                         }
 
                         HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = nova.glassBorder.copy(alpha = 0.55f)
                         )
 
-                        // Theme Doodle Pattern Picker right inside Display Options
+                        ThemePalettePicker(
+                            selectedPalette = state.preferences.themePalette,
+                            language = state.preferences.language,
+                            onSelectPalette = onSelectThemePalette
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = nova.glassBorder.copy(alpha = 0.55f)
+                        )
+
                         DoodleStylePicker(
                             selectedStyle = state.preferences.backgroundDoodle,
                             language = state.preferences.language,
                             onSelectStyle = onSelectBackgroundDoodle
                         )
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
-                        )
-
-                        // Font Size (Small / Medium / Large)
-                        Text(
-                            text = if (isBn) "ফন্ট সাইজ (Font Size)" else "Font Size",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = if (isBn) {
-                                "অ্যাপের লেখাগুলো পড়তে আরও আরামদায়ক করতে সাইজ ঠিক করুন।"
-                            } else {
-                                "Adjust the text size throughout the app to make it more comfortable for reading."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        val fontSizes = listOf(
-                            AppFontScale.SMALL to (if (isBn) "ছোট" else "Small"),
-                            AppFontScale.MEDIUM to (if (isBn) "মাঝারি" else "Medium"),
-                            AppFontScale.LARGE to (if (isBn) "বড়" else "Large")
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            fontSizes.forEach { (scale, label) ->
-                                FilterChip(
-                                    selected = state.preferences.fontScale == scale,
-                                    onClick = { onSelectFontScale(scale) },
-                                    modifier = Modifier.testTag("font_scale_${scale.name.lowercase()}"),
-                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = nova.goldContainer,
-                                        selectedLabelColor = nova.gold
-                                    )
-                                )
-                            }
-                        }
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
-                        )
-
-                        // Incoming Calls Style (Full Screen / Banner)
-                        Text(
-                            text = if (isBn) "ইনকামিং কল স্টাইল (Incoming Calls)" else "Incoming Calls",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = if (isBn) {
-                                "ফোন আনলক থাকা অবস্থায় অন্য অ্যাপ চালানোর সময় ইনকামিং কল কীভাবে দেখাবে তা নির্ধারণ করুন।"
-                            } else {
-                                "Control how incoming calls appear while you are using other apps and the phone is unlocked."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        val incomingStyles = listOf(
-                            IncomingCallDisplayStyle.FULL_SCREEN to (if (isBn) "ফুল স্ক্রিন" else "Full Screen"),
-                            IncomingCallDisplayStyle.BANNER to (if (isBn) "ব্যানার" else "Banner")
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            incomingStyles.forEach { (style, label) ->
-                                FilterChip(
-                                    selected = state.preferences.incomingCallDisplayStyle == style,
-                                    onClick = { onSelectIncomingCallStyle(style) },
-                                    modifier = Modifier.testTag("incoming_style_${style.name.lowercase()}"),
-                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = nova.sim1Container,
-                                        selectedLabelColor = nova.sim1
-                                    )
-                                )
-                            }
-                        }
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
-                        )
-
-                        // Slide to Answer (Show only when locked / Always / Never)
-                        Text(
-                            text = if (isBn) "স্লাইড করে রিসিভ (Slide to Answer)" else "Slide to Answer",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = if (isBn) {
-                                "ফোন লক থাকলে পকেটে ভুল করে কল রিসিভ হওয়া আটকাতে স্লাইড বার ব্যবহার করুন।"
-                            } else {
-                                "Use a horizontal Slide to Answer bar when the phone is locked or always."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        val slideModes = listOf(
-                            SlideToAnswerMode.LOCKED_ONLY to (if (isBn) "শুধু লক থাকলে" else "Only when locked"),
-                            SlideToAnswerMode.ALWAYS to (if (isBn) "সবসময়" else "Always"),
-                            SlideToAnswerMode.NEVER to (if (isBn) "কখনো নয়" else "Never")
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            slideModes.forEach { (mode, label) ->
-                                FilterChip(
-                                    selected = state.preferences.slideToAnswerMode == mode,
-                                    onClick = { onSelectSlideToAnswerMode(mode) },
-                                    modifier = Modifier.testTag("slide_mode_${mode.name.lowercase()}"),
-                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = nova.goldContainer,
-                                        selectedLabelColor = nova.gold
-                                    )
-                                )
-                            }
-                        }
                     }
                 }
 
-                // 1B. Truecaller-Style Community Caller ID & Google Account
-                item {
-                    val cloudProfile = state.cloudCallerId.profile
-                    val truecallerBlue = Color(0xFF0087FF)
+                // 5. Call Ringtone & Dialpad Tone
+                item(key = "ringtone_and_dialpad_tone") {
                     SettingsSectionCard(
-                        title = if (isBn) "Truecaller কলার আইডি • কে কল করছে জানুন" else "Truecaller Caller ID • Know Who's Calling",
-                        icon = Icons.Filled.VerifiedUser,
-                        iconTint = truecallerBlue
+                        title = if (isBn) "কল টোন ও ডায়ালপ্যাড সাউন্ড" else "Call Ringtone & Dialpad Tone",
+                        icon = Icons.Filled.MusicNote,
+                        iconTint = nova.sim2
                     ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "অচেনা নম্বরের নাম অটো-খুঁজুন" else "Live Unknown Caller ID",
-                            subtitle = if (isBn) {
-                                "অচেনা কল এলে বা ডায়ালপ্যাডে নম্বর তুললেই Shajamal কমিউনিটি ডেটাবেজ থেকে নাম ও অপারেটর দেখাবে।"
-                            } else {
-                                "Automatically identifies unknown incoming calls and dialed numbers from Shajamal's community directory."
-                            },
-                            checked = cloudProfile?.callerIdEnabled ?: true,
-                            onCheckedChange = onToggleCloudCallerId,
-                            tag = "switch_cloud_caller_id"
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = onSyncCommunityContacts,
-                                enabled = !state.cloudCallerId.isSyncingContacts,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("sync_community_contacts_button"),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = truecallerBlue,
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                if (state.cloudCallerId.isSyncingContacts) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = Color.White
-                                    )
-                                } else {
-                                    Icon(Icons.Filled.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isBn) "কন্টাক্ট সিঙ্ক (${cloudProfile?.sharedContactCount ?: 0})"
-                                    else "Share Names (${cloudProfile?.sharedContactCount ?: 0})",
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                            OutlinedButton(
-                                onClick = onOpenTagCallerDialog,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("settings_tag_caller_button"),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = if (isBn) "নম্বর ট্যাগ করুন" else "Tag Number",
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
+                        val currentRingtone = state.preferences.customRingtoneTitle.ifBlank {
+                            if (isBn) "ডিফল্ট সিস্টেম রিংটোন" else "Default System Ringtone"
                         }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (isBn) {
-                                "আপনার অনুমতিতেই কেবল কন্টাক্টের নাম কমিউনিটি কলার আইডিতে শেয়ার হবে। আপনার ট্যাগ করা নম্বর: ${state.cloudCallerId.myTags.size}টি।"
-                            } else {
-                                "Contacts are only shared when you tap Share Names. Your contributed tags: ${state.cloudCallerId.myTags.size}."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        if (signedInEmail != null || cloudProfile != null) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 10.dp),
-                                color = nova.glassBorder.copy(alpha = 0.5f)
-                            )
-
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(0.8.dp, nova.glassBorder.copy(alpha = 0.55f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(nova.sim2Container),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Filled.MusicNote, contentDescription = null, tint = nova.sim2, modifier = Modifier.size(20.dp))
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = if (isBn) "সংযুক্ত Google অ্যাকাউন্ট" else "Signed-In Account",
+                                        text = if (isBn) "ইনকামিং কল রিংটোন" else "Incoming Call Ringtone",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = signedInEmail ?: cloudProfile?.displayName ?: "Google User",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        text = currentRingtone,
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = onPickRingtone,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("pick_ringtone_button"),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(if (isBn) "রিংটোন বাছুন" else "Choose Ringtone", style = MaterialTheme.typography.labelMedium)
+                            }
+                            OutlinedButton(
+                                onClick = onOpenSystemSoundSettings,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("open_system_sound_button"),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(if (isBn) "সিস্টেম সাউন্ড" else "System Sound", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = nova.glassBorder.copy(alpha = 0.55f)
+                        )
+
+                        SettingsSwitchRow(
+                            title = strings.keypadSoundLabel,
+                            subtitle = if (isBn) "ডায়ালপ্যাডে নম্বর চাপলে টোন বাজবে" else "Play tone when tapping keypad digits",
+                            checked = state.preferences.dtmfSoundEnabled,
+                            onCheckedChange = onToggleDtmfSound,
+                            tag = "switch_dtmf_sound"
+                        )
+
+                        if (state.preferences.dtmfSoundEnabled) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val soundStyles = listOf(
+                                KeypadSoundStyle.DTMF_CLASSIC to (if (isBn) "ক্লাসিক" else "Classic"),
+                                KeypadSoundStyle.STUDIO_CHIME to (if (isBn) "চাইম" else "Chime"),
+                                KeypadSoundStyle.SOFT_CLICK to (if (isBn) "সফট ক্লিক" else "Soft Click")
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                soundStyles.forEach { (style, label) ->
+                                    FilterChip(
+                                        selected = state.preferences.keypadSoundStyle == style,
+                                        onClick = { onSelectSoundStyle(style) },
+                                        modifier = Modifier.testTag("sound_style_${style.name.lowercase()}"),
+                                        label = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = null,
+                                    tint = nova.gold,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Slider(
+                                    value = state.preferences.keypadSoundVolume,
+                                    onValueChange = onChangeSoundVolume,
+                                    valueRange = 0.1f..1.0f,
+                                    modifier = Modifier.weight(1f),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
                                 OutlinedButton(
-                                    onClick = onSignOut,
-                                    modifier = Modifier.testTag("settings_sign_out_button"),
-                                    shape = RoundedCornerShape(12.dp)
+                                    onClick = onPreviewSound,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
-                                    Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(if (isBn) "সাইন আউট" else "Sign Out", style = MaterialTheme.typography.labelMedium)
+                                    Text(if (isBn) "শুনুন" else "Test", style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
                     }
                 }
 
-                // 1C. Call Recordings Library (In-Call Recorded Audio)
-                item {
+                // 6. Notifications & Vibration
+                item(key = "notifications_and_vibration") {
                     SettingsSectionCard(
-                        title = if (isBn) "কল রেকর্ডিংস (${recordings.size})" else "Call Recordings (${recordings.size})",
-                        icon = Icons.Filled.FiberManualRecord,
+                        title = if (isBn) "নোটিফিকেশন ও ভাইব্রেশন" else "Notifications & Vibration",
+                        icon = Icons.Filled.Notifications,
+                        iconTint = nova.gold
+                    ) {
+                        SettingsSwitchRow(
+                            title = if (isBn) "ইনকামিং কল নোটিফিকেশন" else "Incoming Call Alerts",
+                            subtitle = null,
+                            checked = state.preferences.notifyIncomingCalls,
+                            onCheckedChange = onToggleNotifyIncoming,
+                            tag = "switch_notify_incoming"
+                        )
+                        SettingsSwitchRow(
+                            title = if (isBn) "মিসড কল নোটিফিকেশন" else "Missed Call Alerts",
+                            subtitle = null,
+                            checked = state.preferences.notifyMissedCalls,
+                            onCheckedChange = onToggleNotifyMissed,
+                            tag = "switch_notify_missed"
+                        )
+                        SettingsSwitchRow(
+                            title = if (isBn) "চলমান কল নোটিফিকেশন" else "Ongoing Call Notification",
+                            subtitle = null,
+                            checked = state.preferences.notifyOngoingCalls,
+                            onCheckedChange = onToggleNotifyOngoing,
+                            tag = "switch_notify_ongoing"
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            color = nova.glassBorder.copy(alpha = 0.45f)
+                        )
+                        SettingsSwitchRow(
+                            title = if (isBn) "কল এলে ভাইব্রেট" else "Vibrate on Ring",
+                            subtitle = null,
+                            checked = state.preferences.vibrateOnRing,
+                            onCheckedChange = onToggleVibrateOnRing,
+                            tag = "switch_vibrate_ring"
+                        )
+                        SettingsSwitchRow(
+                            title = strings.hapticLabel,
+                            subtitle = if (isBn) "ডায়ালপ্যাডে বাটন চাপলে হালকা ভাইব্রেশন" else "Gentle vibration on dialpad taps",
+                            checked = state.preferences.hapticEnabled,
+                            onCheckedChange = onToggleHaptic,
+                            tag = "switch_haptic"
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onOpenSystemNotificationSettings,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("open_notification_settings_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = if (isBn) "সিস্টেম নোটিফিকেশন সেটিংস" else "System Notification Settings",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+
+                // 7. Block List
+                item(key = "block_list") {
+                    SettingsSectionCard(
+                        title = "${strings.blockedListTitle} (${state.blockedNumbers.size})",
+                        icon = Icons.Filled.Block,
                         iconTint = nova.missed,
                         trailing = {
-                            IconButton(
-                                onClick = { recordings = CallRecorderManager.listRecordings(context) },
-                                modifier = Modifier.testTag("refresh_recordings_button")
+                            OutlinedButton(
+                                onClick = onOpenAddBlockDialog,
+                                modifier = Modifier.testTag("settings_add_block_button"),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Refresh,
-                                    contentDescription = "Refresh recordings",
-                                    tint = nova.gold
-                                )
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (isBn) "ব্লক যোগ" else "Add", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     ) {
-                        Text(
-                            text = if (isBn) {
-                                "কল করার সময় অথবা কল রিসিভ করার পর কল স্ক্রিনের 'রেকর্ড' বাটনে চাপলে অডিও এখানে সেভ হবে। পরিষ্কার ভয়েস পেতে কল চলাকালীন স্পিকার অন রাখতে পারেন।"
-                            } else {
-                                "Tap 'Record' on the call screen during outgoing or answered calls to save recordings here. Turning on Speaker improves remote voice capture on Android 10+."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        SettingsSwitchRow(
+                            title = if (isBn) "ব্লকড কল অটো-রিজেক্ট" else "Auto-Reject Blocked Calls",
+                            subtitle = if (isBn) "ব্লক করা নম্বর থেকে কল এলে সাথে সাথে কেটে দেবে" else "Automatically reject incoming calls from blocked numbers",
+                            checked = state.preferences.autoRejectBlocked,
+                            onCheckedChange = onToggleAutoRejectBlocked,
+                            tag = "switch_auto_reject_blocked"
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        if (recordings.isEmpty()) {
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (state.blockedNumbers.isEmpty()) {
                             Text(
-                                text = if (isBn) "এখনো কোনো কল রেকর্ড করা হয়নি।" else "No call recordings saved yet.",
+                                text = if (isBn) "এখনো কোনো নম্বর ব্লক করা হয়নি।" else "No blocked numbers yet.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            val dateFmt = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                recordings.forEach { rec ->
-                                    val isPlaying = playingRecordingPath == rec.filePath
-                                    val sizeKb = (rec.sizeBytes / 1024L).coerceAtLeast(1L)
+                                state.blockedNumbers.forEach { entry ->
                                     Surface(
                                         shape = RoundedCornerShape(14.dp),
-                                        color = if (isPlaying) nova.sim1Container.copy(alpha = 0.55f)
-                                        else MaterialTheme.colorScheme.surfaceContainerHigh
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh
                                     ) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            IconButton(
-                                                onClick = {
-                                                    val started = CallRecorderManager.togglePlayback(rec.filePath) {
-                                                        playingRecordingPath = null
-                                                    }
-                                                    playingRecordingPath = if (started) rec.filePath else null
-                                                },
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .clip(CircleShape)
-                                                    .background(if (isPlaying) nova.missed else nova.sim1)
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                                                    contentDescription = if (isPlaying) "Stop" else "Play",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = rec.displayTitle,
+                                                    text = entry.label.ifBlank { formatDisplayNumber(entry.displayNumber) },
                                                     style = MaterialTheme.typography.titleSmall,
                                                     color = MaterialTheme.colorScheme.onSurface,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                                 Text(
-                                                    text = "${dateFmt.format(Date(rec.timestampMillis))} • ${sizeKb} KB",
+                                                    text = formatDisplayNumber(entry.displayNumber),
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    maxLines = 1
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                             IconButton(
-                                                onClick = {
-                                                    if (playingRecordingPath == rec.filePath) {
-                                                        playingRecordingPath = null
-                                                    }
-                                                    CallRecorderManager.deleteRecording(rec.filePath)
-                                                    recordings = CallRecorderManager.listRecordings(context)
-                                                }
+                                                onClick = { onUnblockNumber(entry.normalizedNumber) },
+                                                modifier = Modifier.testTag("unblock_${entry.normalizedNumber}")
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Filled.DeleteOutline,
-                                                    contentDescription = strings.delete,
+                                                    contentDescription = strings.unblockNumber,
                                                     tint = nova.missed
                                                 )
                                             }
@@ -750,403 +952,18 @@ fun SettingsScreen(
                     }
                 }
 
-                // 2. Notification Settings
-                item {
-                    SettingsSectionCard(
-                        title = if (isBn) "নোটিফিকেশন সেটিংস" else "Notification Settings",
-                        icon = Icons.Filled.Notifications,
-                        iconTint = nova.gold
+                // 8. Language
+                item(key = "language") {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        color = nova.glassSurface,
+                        border = BorderStroke(1.dp, nova.glassBorder.copy(alpha = 0.75f))
                     ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "ইনকামিং কল ফুল-স্ক্রিন অ্যালার্ট" else "Incoming Call Full-Screen Alert",
-                            subtitle = if (isBn) "কেউ কল দিলে লক স্ক্রিনে Shajamal কল স্ক্রিন দেখাবে" else "Show Shajamal full-screen incoming UI on lock screen",
-                            checked = state.preferences.notifyIncomingCalls,
-                            onCheckedChange = onToggleNotifyIncoming,
-                            tag = "switch_notify_incoming"
-                        )
-                        SettingsSwitchRow(
-                            title = if (isBn) "মিসড কল নোটিফিকেশন" else "Missed Call Alerts",
-                            subtitle = if (isBn) "কল রিসিভ না করলে নোটিফিকেশন দেখাবে" else "Notify immediately when an incoming call is missed",
-                            checked = state.preferences.notifyMissedCalls,
-                            onCheckedChange = onToggleNotifyMissed,
-                            tag = "switch_notify_missed"
-                        )
-                        SettingsSwitchRow(
-                            title = if (isBn) "চলমান কল নোটিফিকেশন বার" else "Ongoing Call Status Bar",
-                            subtitle = if (isBn) "কল চলাকালীন স্ট্যাটাস বারে কুইক কন্ট্রোল রাখবে" else "Show active call timer and hang-up action in status bar",
-                            checked = state.preferences.notifyOngoingCalls,
-                            onCheckedChange = onToggleNotifyOngoing,
-                            tag = "switch_notify_ongoing"
-                        )
-                        SettingsSwitchRow(
-                            title = if (isBn) "রিং করার সময় ভাইব্রেশন" else "Vibrate on Ring",
-                            subtitle = null,
-                            checked = state.preferences.vibrateOnRing,
-                            onCheckedChange = onToggleVibrateOnRing,
-                            tag = "switch_vibrate_ring"
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (!state.permissions.hasPostNotifications) {
-                                Button(
-                                    onClick = onRequestPermissions,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text(
-                                        text = if (isBn) "নোটিফিকেশন অনুমতি দিন" else "Allow Notifications",
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-                            }
-                            OutlinedButton(
-                                onClick = onOpenSystemNotificationSettings,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("system_notif_settings_button"),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = if (isBn) "সিস্টেম নোটিফিকেশন সেটিংস" else "System Channel Settings",
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 3. Dialpad Sound & Haptics
-                item {
-                    SettingsSectionCard(
-                        title = if (isBn) "ডায়ালপ্যাড সাউন্ড ও ভাইব্রেশন" else "Dialpad Sound & Vibration",
-                        icon = Icons.AutoMirrored.Filled.VolumeUp,
-                        iconTint = nova.sim1
-                    ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "ডায়ালপ্যাড কী সাউন্ড" else "Dialpad Key Sound",
-                            subtitle = if (isBn) "নম্বর চাপলে স্পষ্ট ও পরিষ্কার শব্দ হবে" else "Play crisp audible tones on every keypad press",
-                            checked = state.preferences.dtmfSoundEnabled,
-                            onCheckedChange = onToggleDtmfSound,
-                            tag = "switch_dialpad_sound"
-                        )
-
-                        if (state.preferences.dtmfSoundEnabled) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = if (isBn) "সাউন্ডের ধরন বেছে নিন (ট্যাপ করে শুনুন)" else "Sound Style (tap to preview)",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            val styles = listOf(
-                                KeypadSoundStyle.DTMF_CLASSIC to (if (isBn) "ক্লাসিক DTMF" else "Classic DTMF"),
-                                KeypadSoundStyle.STUDIO_CHIME to (if (isBn) "স্টুডিও চাইম" else "Studio Chime"),
-                                KeypadSoundStyle.SOFT_CLICK to (if (isBn) "সফট ক্লিক" else "Soft Click")
-                            )
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                styles.forEach { (style, label) ->
-                                    FilterChip(
-                                        selected = state.preferences.keypadSoundStyle == style,
-                                        onClick = { onSelectSoundStyle(style) },
-                                        modifier = Modifier.testTag("sound_style_${style.name.lowercase()}"),
-                                        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = nova.sim1Container,
-                                            selectedLabelColor = nova.sim1
-                                        )
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (isBn) "সাউন্ড ভলিউম" else "Sound Volume",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "${(state.preferences.keypadSoundVolume * 100).toInt()}%",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = nova.gold
-                                )
-                            }
-                            Slider(
-                                value = state.preferences.keypadSoundVolume,
-                                onValueChange = onChangeSoundVolume,
-                                onValueChangeFinished = onPreviewSound,
-                                valueRange = 0.25f..1.0f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = nova.gold,
-                                    activeTrackColor = nova.gold
-                                )
-                            )
-                        }
-
-                        SettingsSwitchRow(
-                            title = strings.hapticLabel,
-                            subtitle = null,
-                            checked = state.preferences.hapticEnabled,
-                            onCheckedChange = onToggleHaptic,
-                            tag = "switch_settings_haptic"
-                        )
-                    }
-                }
-
-                // 4. Block List & Auto-Reject
-                item {
-                    SettingsSectionCard(
-                        title = "${strings.blockedListTitle} (${state.blockedNumbers.size})",
-                        icon = Icons.Filled.Block,
-                        iconTint = nova.missed,
-                        trailing = {
-                            IconButton(
-                                onClick = onOpenAddBlockDialog,
-                                modifier = Modifier.testTag("settings_add_block_button")
-                            ) {
-                                Icon(Icons.Filled.Add, contentDescription = strings.blockNumber, tint = nova.missed)
-                            }
-                        }
-                    ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "ব্লকড কল অটো-রিজেক্ট করুন" else "Auto-Reject Blocked Callers",
-                            subtitle = if (isBn) "ব্লক লিস্টের নম্বর থেকে কল এলে স্বয়ংক্রিয়ভাবে কেটে যাবে" else "Automatically block & reject incoming calls from blocked numbers",
-                            checked = state.preferences.autoRejectBlocked,
-                            onCheckedChange = onToggleAutoRejectBlocked,
-                            tag = "switch_auto_reject_blocked"
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        if (state.blockedNumbers.isEmpty()) {
-                            Text(
-                                text = if (isBn) "কোনো নম্বর ব্লক করা নেই। উপরে + চেপে নতুন নম্বর যোগ করুন।" else "No blocked numbers yet. Tap + above to block a number.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                state.blockedNumbers.forEach { blocked ->
-                                    Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = nova.missedContainer.copy(alpha = 0.45f)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = blocked.label,
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                                Text(
-                                                    text = listOf(blocked.displayNumber, blocked.reason)
-                                                        .filter { it.isNotBlank() }
-                                                        .joinToString(" • "),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            OutlinedButton(
-                                                onClick = { onUnblockNumber(blocked.normalizedNumber) },
-                                                shape = RoundedCornerShape(10.dp),
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                            ) {
-                                                Text(strings.unblockNumber, style = MaterialTheme.typography.labelSmall)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 5. Call & Dual-SIM Settings
-                item {
-                    SettingsSectionCard(
-                        title = if (isBn) "কল ও ডুয়াল সিম সেটিংস" else "Call & Dual-SIM Settings",
-                        icon = Icons.Filled.SimCard,
-                        iconTint = nova.sim1
-                    ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "কল শুরু হলে অটো স্পিকার" else "Auto Speakerphone on Call",
-                            subtitle = null,
-                            checked = state.preferences.autoSpeakerOnCall,
-                            onCheckedChange = onToggleAutoSpeaker,
-                            tag = "switch_auto_speaker"
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = strings.defaultLineTitle,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        val routes = listOf(
-                            DefaultRoutePreference.ASK to strings.askEveryTime,
-                            DefaultRoutePreference.SIM_1 to "SIM 1",
-                            DefaultRoutePreference.SIM_2 to "SIM 2"
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            routes.forEach { (pref, label) ->
-                                FilterChip(
-                                    selected = state.preferences.defaultRoute == pref,
-                                    onClick = { onUpdateDefaultRoute(pref) },
-                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) }
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = sim1Input,
-                                onValueChange = { sim1Input = it },
-                                label = { Text("SIM 1") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(14.dp)
-                            )
-                            OutlinedTextField(
-                                value = sim2Input,
-                                onValueChange = { sim2Input = it },
-                                label = { Text("SIM 2") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(14.dp)
-                            )
-                            Button(
-                                onClick = {
-                                    onUpdateSimAlias(0, sim1Input)
-                                    onUpdateSimAlias(1, sim2Input)
-                                },
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(strings.save, style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-                    }
-                }
-
-                // 6. Quick SMS Reject Templates
-                item {
-                    SettingsSectionCard(
-                        title = strings.quickRepliesTitle,
-                        icon = Icons.AutoMirrored.Filled.Message,
-                        iconTint = nova.sim2
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            state.preferences.quickReplies.forEach { reply ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = reply,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    IconButton(
-                                        onClick = { onRemoveQuickReply(reply) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.DeleteOutline,
-                                            contentDescription = strings.delete,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedTextField(
-                                    value = newReply,
-                                    onValueChange = { newReply = it },
-                                    placeholder = { Text(strings.addQuickReplyHint) },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(14.dp)
-                                )
-                                Button(
-                                    onClick = {
-                                        if (newReply.isNotBlank()) {
-                                            onAddQuickReply(newReply)
-                                            newReply = ""
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Filled.Add, contentDescription = strings.save)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 7. Appearance & Language
-                item {
-                    SettingsSectionCard(
-                        title = strings.personalizationTitle,
-                        icon = Icons.Filled.Tune,
-                        iconTint = nova.gold
-                    ) {
-                        ThemePalettePicker(
-                            selectedPalette = state.preferences.themePalette,
-                            language = state.preferences.language,
-                            onSelectPalette = onSelectThemePalette
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
-                        )
-                        DoodleStylePicker(
-                            selectedStyle = state.preferences.backgroundDoodle,
-                            language = state.preferences.language,
-                            onSelectStyle = onSelectBackgroundDoodle
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
-                        )
-                        SettingsSwitchRow(
-                            title = strings.darkModeLabel,
-                            subtitle = null,
-                            checked = state.preferences.darkThemeEnabled,
-                            onCheckedChange = onToggleDarkTheme,
-                            tag = "settings_dark_theme"
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1157,7 +974,7 @@ fun SettingsScreen(
                                 Icon(Icons.Filled.Language, contentDescription = null, tint = nova.gold, modifier = Modifier.size(20.dp))
                                 Text(
                                     text = strings.languageLabel,
-                                    style = MaterialTheme.typography.titleSmall,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -1165,16 +982,130 @@ fun SettingsScreen(
                                 FilterChip(
                                     selected = state.preferences.language == AppLanguage.BENGALI,
                                     onClick = { onToggleLanguage(AppLanguage.BENGALI) },
+                                    modifier = Modifier.testTag("lang_bn_chip"),
                                     label = { Text("বাংলা") }
                                 )
                                 FilterChip(
                                     selected = state.preferences.language == AppLanguage.ENGLISH,
                                     onClick = { onToggleLanguage(AppLanguage.ENGLISH) },
+                                    modifier = Modifier.testTag("lang_en_chip"),
                                     label = { Text("EN") }
                                 )
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimBalanceRow(
+    slotIndex: Int,
+    simTitle: String,
+    carrierName: String,
+    accent: Color,
+    container: Color,
+    ussdCode: String,
+    onUssdChange: (String) -> Unit,
+    onSaveUssd: () -> Unit,
+    onCheckBalance: () -> Unit,
+    isChecking: Boolean,
+    balanceResult: String?,
+    isBn: Boolean
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = container.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.SimCard, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "$simTitle • $carrierName",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Button(
+                    onClick = onCheckBalance,
+                    enabled = !isChecking,
+                    modifier = Modifier.testTag("check_balance_sim_${slotIndex + 1}"),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accent,
+                        contentColor = Color(0xFF042619)
+                    )
+                ) {
+                    if (isChecking) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color(0xFF042619))
+                    } else {
+                        Icon(Icons.Filled.Call, contentDescription = null, modifier = Modifier.size(15.dp))
+                    }
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = if (isBn) "ব্যালেন্স চেক" else "Check Balance",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = ussdCode,
+                    onValueChange = onUssdChange,
+                    label = { Text(if (isBn) "USSD কোড (যেমন *566#)" else "USSD Code (e.g. *566#)") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("sim_${slotIndex + 1}_ussd_input")
+                )
+                OutlinedButton(
+                    onClick = onSaveUssd,
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+                ) {
+                    Text(if (isBn) "সেভ" else "Save", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+
+            if (!balanceResult.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = balanceResult,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(10.dp)
+                    )
                 }
             }
         }
@@ -1204,13 +1135,16 @@ private fun SettingsSectionCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 trailing?.invoke()

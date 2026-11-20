@@ -1,11 +1,15 @@
 package com.example.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.IntentCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -76,6 +80,7 @@ import com.example.data.model.normalizePhoneNumber
 import com.example.data.telephony.CallStateManager
 import com.example.data.telephony.NewContactPayload
 import com.example.ui.components.BlockNumberDialog
+import com.example.ui.components.CallHistoryBottomSheet
 import com.example.ui.components.CallNoteDialog
 import com.example.ui.components.CallerDetailBottomSheet
 import com.example.ui.components.ChooseLineBottomSheet
@@ -181,6 +186,47 @@ fun NovaCallApp(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
         viewModel.refreshSystemData(force = true)
+    }
+
+    val ringtonePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val pickedUri = result.data?.let { data ->
+                IntentCompat.getParcelableExtra(data, RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            }
+            if (pickedUri != null) {
+                val title = runCatching {
+                    RingtoneManager.getRingtone(context, pickedUri)?.getTitle(context)
+                }.getOrNull().orEmpty().ifBlank { "Custom Ringtone" }
+                runCatching {
+                    RingtoneManager.setActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE, pickedUri)
+                }
+                viewModel.updateCustomRingtone(pickedUri.toString(), title)
+            } else {
+                viewModel.updateCustomRingtone("", if (state.preferences.language == AppLanguage.BENGALI) "সাইলেন্ট" else "Silent")
+            }
+        }
+    }
+
+    val launchRingtonePicker: () -> Unit = {
+        val currentUri = state.preferences.customRingtoneUri
+            .takeIf { it.isNotBlank() }
+            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            ?: RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
+        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_RINGTONE)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+            putExtra(
+                RingtoneManager.EXTRA_RINGTONE_TITLE,
+                if (state.preferences.language == AppLanguage.BENGALI) "কল রিংটোন বাছুন" else "Select Call Ringtone"
+            )
+            if (currentUri != null) {
+                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, currentUri)
+            }
+        }
+        runCatching { ringtonePickerLauncher.launch(intent) }
     }
 
     val requestAllPermissions: () -> Unit = {
@@ -379,44 +425,36 @@ fun NovaCallApp(
                                         onRequestDefaultDialer = requestDefaultDialer,
                                         onOpenAppInfoSettings = viewModel::openAppInfoSettings,
                                         onOpenSystemDefaultApps = viewModel::openSystemDefaultAppsSettings,
-                                        onRequestPermissions = requestAllPermissions,
+                                        onCheckSimBalance = viewModel::checkSimBalance,
+                                        onSaveSimBalanceUssd = viewModel::updateSimBalanceUssd,
+                                        defaultUssdForSlot = viewModel::defaultBalanceUssdForSlot,
+                                        onSaveIccConfig = viewModel::saveIccSipConfig,
+                                        onTestIccSipServer = viewModel::testIccSipServer,
+                                        onOpenSipCallingAccounts = viewModel::openSipCallingAccountsSettings,
+                                        onRefreshIspStatus = viewModel::refreshIspNetworkStatus,
+                                        onOpenWebUrl = viewModel::openWebUrl,
+                                        onCallHelpline = { helpline ->
+                                            viewModel.openRoutePicker(helpline, "ICC 24/7 Helpline")
+                                        },
+                                        onSelectDisplayThemeMode = viewModel::updateDisplayThemeMode,
+                                        onSelectThemePalette = viewModel::updateThemePalette,
+                                        onSelectBackgroundDoodle = viewModel::updateBackgroundDoodle,
+                                        onPickRingtone = launchRingtonePicker,
+                                        onOpenSystemSoundSettings = viewModel::openSystemSoundSettings,
+                                        onToggleDtmfSound = viewModel::updateDtmfSound,
+                                        onSelectSoundStyle = viewModel::updateKeypadSoundStyle,
+                                        onChangeSoundVolume = viewModel::updateKeypadSoundVolume,
+                                        onPreviewSound = { viewModel.previewKeypadSound() },
                                         onOpenSystemNotificationSettings = viewModel::openAppNotificationSettings,
                                         onToggleNotifyIncoming = viewModel::updateNotifyIncoming,
                                         onToggleNotifyMissed = viewModel::updateNotifyMissed,
                                         onToggleNotifyOngoing = viewModel::updateNotifyOngoing,
                                         onToggleVibrateOnRing = viewModel::updateVibrateOnRing,
+                                        onToggleHaptic = viewModel::updateHaptic,
                                         onToggleAutoRejectBlocked = viewModel::updateAutoRejectBlocked,
                                         onOpenAddBlockDialog = { blockDialogRequest = BlockDialogRequest("", "") },
                                         onUnblockNumber = viewModel::unblockNumber,
-                                        onToggleDtmfSound = viewModel::updateDtmfSound,
-                                        onSelectSoundStyle = viewModel::updateKeypadSoundStyle,
-                                        onChangeSoundVolume = viewModel::updateKeypadSoundVolume,
-                                        onPreviewSound = { viewModel.previewKeypadSound() },
-                                        onToggleHaptic = viewModel::updateHaptic,
-                                        onToggleAutoSpeaker = viewModel::updateAutoSpeaker,
-                                        onUpdateDefaultRoute = viewModel::updateDefaultRoute,
-                                        onUpdateSimAlias = viewModel::updateSimAlias,
-                                        onAddQuickReply = viewModel::addQuickReply,
-                                        onRemoveQuickReply = viewModel::removeQuickReply,
-                                        onToggleDarkTheme = viewModel::updateDarkTheme,
-                                        onSelectThemePalette = viewModel::updateThemePalette,
-                                        onSelectBackgroundDoodle = viewModel::updateBackgroundDoodle,
-                                        onToggleLiquidGlass = viewModel::updateLiquidGlass,
-                                        onSelectDisplayThemeMode = viewModel::updateDisplayThemeMode,
-                                        onSelectFontScale = viewModel::updateFontScale,
-                                        onSelectIncomingCallStyle = viewModel::updateIncomingCallDisplayStyle,
-                                        onSelectSlideToAnswerMode = viewModel::updateSlideToAnswerMode,
-                                        onToggleLanguage = viewModel::updateLanguage,
-                                        signedInEmail = signedInEmail,
-                                        onToggleCloudCallerId = viewModel::toggleCloudCallerIdEnabled,
-                                        onSyncCommunityContacts = viewModel::syncContactsToCommunityCallerId,
-                                        onOpenTagCallerDialog = {
-                                            tagCallerRequest = TagCallerDialogRequest(
-                                                number = state.dialedDigits,
-                                                name = ""
-                                            )
-                                        },
-                                        onSignOut = onSignOut
+                                        onToggleLanguage = viewModel::updateLanguage
                                     )
                                 } else {
                                     when (state.activeTab) {
@@ -439,6 +477,16 @@ fun NovaCallApp(
                                             onOpenSettings = viewModel::openSettings,
                                             onRequestPermissions = requestAllPermissions,
                                             onCallRoute = viewModel::placeCall,
+                                            onRequestCallWith = viewModel::openRoutePicker,
+                                            onOpenCallHistory = viewModel::openCallHistory,
+                                            onEditInKeypad = viewModel::setDialedNumber,
+                                            onToggleBlockNumber = { num, name, currentlyBlocked ->
+                                                if (currentlyBlocked) {
+                                                    viewModel.unblockNumber(normalizePhoneNumber(num))
+                                                } else {
+                                                    blockDialogRequest = BlockDialogRequest(num, name.orEmpty())
+                                                }
+                                            },
                                             onOpenCallerDetail = viewModel::openCallerDetail,
                                             onOpenTagCaller = { num, existingName ->
                                                 tagCallerRequest = TagCallerDialogRequest(
@@ -491,6 +539,7 @@ fun NovaCallApp(
                                             onBackspace = viewModel::onDialBackspace,
                                             onClearAll = viewModel::onDialClear,
                                             onCallRoute = viewModel::placeCall,
+                                            onRequestCallWith = viewModel::openRoutePicker,
                                             onWhatsApp = viewModel::openWhatsApp,
                                             onAddContact = { num ->
                                                 saveContactRequest = SaveContactDialogRequest(
@@ -594,7 +643,30 @@ fun NovaCallApp(
                 )
             }
 
-            // Bottom Sheet: Choose Calling Line
+            // Bottom Sheet: Call History (N) on Recents Tap
+            state.callHistoryTarget?.let { target ->
+                CallHistoryBottomSheet(
+                    target = target,
+                    state = state,
+                    strings = strings,
+                    onDismiss = viewModel::closeCallHistory,
+                    onCallNow = { viewModel.openRoutePicker(target.number, target.name) },
+                    onEditNumber = { viewModel.setDialedNumber(target.number) },
+                    onToggleBlock = { currentlyBlocked ->
+                        if (currentlyBlocked) {
+                            viewModel.unblockNumber(target.normalizedNumber)
+                        } else {
+                            blockDialogRequest = BlockDialogRequest(
+                                number = target.number,
+                                label = target.name.orEmpty()
+                            )
+                        }
+                    },
+                    onDeleteSingleEntry = viewModel::deleteSingleCallLogEntry
+                )
+            }
+
+            // Bottom Sheet: Choose Calling Line ("Call with")
             state.routePickerTarget?.let { target ->
                 ChooseLineBottomSheet(
                     target = target,

@@ -115,6 +115,7 @@ fun KeypadScreen(
     onBackspace: () -> Unit,
     onClearAll: () -> Unit,
     onCallRoute: (String, CallRoute, String?) -> Unit,
+    onRequestCallWith: (String, String?) -> Unit,
     onWhatsApp: (String) -> Unit,
     onAddContact: (String) -> Unit,
     onCopyNumber: (String) -> Unit,
@@ -189,6 +190,10 @@ fun KeypadScreen(
                             SimMiniDot(label = state.sim1.displayName, color = nova.sim1)
                             Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                             SimMiniDot(label = state.sim2.displayName, color = nova.sim2)
+                            if (state.preferences.iccSipEnabled) {
+                                Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                                SimMiniDot(label = "ICC IP", color = nova.brilliant)
+                            }
                         }
                     }
                     Row(
@@ -457,7 +462,7 @@ fun KeypadScreen(
                                 contact = contact,
                                 onSelect = { onSelectT9Contact(contact) },
                                 onQuickCall = {
-                                    onCallRoute(contact.phoneNumber, CallRoute.SIM_1, contact.name)
+                                    onRequestCallWith(contact.phoneNumber, contact.name)
                                 }
                             )
                         }
@@ -607,12 +612,15 @@ fun KeypadScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Clean Dual-SIM Call Dock: SIM 1 & SIM 2
-            DualSimCallDock(
-                sim1Name = state.sim1.displayName,
-                sim2Name = state.sim2.displayName,
-                onCallSim1 = { onCallRoute(state.dialedDigits, CallRoute.SIM_1, null) },
-                onCallSim2 = { onCallRoute(state.dialedDigits, CallRoute.SIM_2, null) }
+            // Primary Centered Call Button -> opens "Call with" (SIM 1 / SIM 2 / ICC IP) bottom sheet
+            SinglePrimaryCallButton(
+                label = if (isBn) "কল করুন" else "Call",
+                onClick = {
+                    val matchedName = state.t9Matches.firstOrNull {
+                        it.normalizedNumber.endsWith(state.dialedDigits.filter { ch -> ch.isDigit() }.takeLast(10))
+                    }?.name ?: state.cloudCallerId.dialedLookup?.displayName
+                    onRequestCallWith(state.dialedDigits, matchedName)
+                }
             )
 
             Spacer(modifier = Modifier.height(78.dp))
@@ -824,121 +832,41 @@ private fun DialKeyButton(
 }
 
 @Composable
-private fun DualSimCallDock(
-    sim1Name: String,
-    sim2Name: String,
-    onCallSim1: () -> Unit,
-    onCallSim2: () -> Unit
+private fun SinglePrimaryCallButton(
+    label: String,
+    onClick: () -> Unit
 ) {
     val nova = LocalNovaColors.current
-
-    Row(
+    Box(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        contentAlignment = Alignment.Center
     ) {
-        // SIM 1 Hero Pill
-        Box(
+        Surface(
             modifier = Modifier
-                .weight(1f)
-                .height(54.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(nova.sim1, Color(0xFF00C853))
-                    )
-                )
-                .border(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(20.dp)
-                )
-                .clickable(onClick = onCallSim1)
-                .testTag("call_sim1_button"),
-            contentAlignment = Alignment.Center
+                .size(66.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClick)
+                .testTag("keypad_primary_call_button"),
+            shape = CircleShape,
+            color = nova.sim1,
+            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.28f)),
+            shadowElevation = 6.dp
         ) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 10.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(nova.sim1, Color(0xFF00C853))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Call,
-                        contentDescription = stringResource(R.string.cd_call_sim1),
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "SIM 1",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
-                    )
-                }
-                Text(
-                    text = sim1Name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.88f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        // SIM 2 Hero Pill
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(54.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(nova.sim2, Color(0xFF2979FF))
-                    )
-                )
-                .border(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(20.dp)
-                )
-                .clickable(onClick = onCallSim2)
-                .testTag("call_sim2_button"),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 10.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.SimCard,
-                        contentDescription = stringResource(R.string.cd_call_sim2),
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "SIM 2",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
-                    )
-                }
-                Text(
-                    text = sim2Name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.88f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                Icon(
+                    imageVector = Icons.Filled.Call,
+                    contentDescription = label,
+                    tint = Color.White,
+                    modifier = Modifier.size(30.dp)
                 )
             }
         }

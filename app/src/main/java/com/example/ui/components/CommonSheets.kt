@@ -52,14 +52,27 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import com.example.data.local.SpeedDialEntity
 import com.example.data.model.AppLanguage
+import com.example.data.model.CallDirection
 import com.example.data.model.CallRoute
 import com.example.data.model.formatDisplayNumber
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
 import com.example.ui.viewmodel.CallerDetailTarget
 import com.example.ui.viewmodel.DialerUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -250,6 +263,256 @@ fun CallerDetailBottomSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun CallHistoryBottomSheet(
+    target: CallerDetailTarget,
+    state: DialerUiState,
+    strings: NovaStrings,
+    onDismiss: () -> Unit,
+    onCallNow: () -> Unit,
+    onEditNumber: () -> Unit,
+    onToggleBlock: (Boolean) -> Unit,
+    onDeleteSingleEntry: (String) -> Unit
+) {
+    val nova = LocalNovaColors.current
+    val isBn = state.preferences.language == AppLanguage.BENGALI
+    val targetTail = target.normalizedNumber.takeLast(10)
+    val isBlocked = remember(state.blockedNumbers, target.normalizedNumber) {
+        state.blockedNumbers.any {
+            it.normalizedNumber == target.normalizedNumber ||
+                (targetTail.length >= 8 && it.normalizedNumber.endsWith(targetTail))
+        }
+    }
+    val matchedPhotoUri = remember(target.normalizedNumber, state.contacts) {
+        state.contacts.firstOrNull {
+            it.normalizedNumber == target.normalizedNumber ||
+                (targetTail.length >= 8 && it.normalizedNumber.endsWith(targetTail))
+        }?.photoUri
+    }
+    val historyEntries = remember(state.callLogs, target.normalizedNumber, target.number) {
+        state.callLogs.filter { entry ->
+            when {
+                targetTail.length >= 8 && entry.normalizedNumber.length >= 8 ->
+                    entry.normalizedNumber.takeLast(10) == targetTail
+                target.normalizedNumber.isNotBlank() ->
+                    entry.normalizedNumber == target.normalizedNumber
+                else -> entry.number.trim() == target.number.trim()
+            }
+        }
+    }
+    val dateFmt = remember { SimpleDateFormat("EEE, MMM d • HH:mm", Locale.getDefault()) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 26.dp)
+        ) {
+            // Header: Avatar + Name/Number + Red Block button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ContactAvatar(
+                    name = target.name ?: target.number,
+                    photoUri = matchedPhotoUri,
+                    size = 52.dp
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = target.name?.takeIf { it.isNotBlank() } ?: formatDisplayNumber(target.number),
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = formatDisplayNumber(target.number),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = nova.sim1
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onToggleBlock(isBlocked) }
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .testTag("history_sheet_block_button"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Block,
+                        contentDescription = if (isBlocked) strings.unblockNumber else strings.blockNumber,
+                        tint = nova.missed,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = if (isBlocked) {
+                            if (isBn) "আনব্লক" else "Unblock"
+                        } else {
+                            if (isBn) "ব্লক" else "Block"
+                        },
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = nova.missed
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Two Side-by-Side Pill Buttons: Call Now | Edit Number (matching Screenshot 3)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = {
+                        onDismiss()
+                        onCallNow()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("history_sheet_call_now_button"),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = nova.sim1,
+                        contentColor = Color(0xFF042619)
+                    )
+                ) {
+                    Icon(Icons.Filled.Call, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isBn) "কল করুন" else "Call Now",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+                OutlinedButton(
+                    onClick = {
+                        onDismiss()
+                        onEditNumber()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("history_sheet_edit_number_button"),
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(1.dp, nova.glassBorder)
+                ) {
+                    Icon(
+                        Icons.Filled.Dialpad,
+                        contentDescription = null,
+                        tint = nova.sim1,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isBn) "নম্বর এডিট" else "Edit Number",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = nova.sim1
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Section Title: Call History (N)
+            Text(
+                text = if (isBn) "কল হিস্ট্রি (${historyEntries.size})" else "Call History (${historyEntries.size})",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (historyEntries.isEmpty()) {
+                Text(
+                    text = if (isBn) "এই নম্বরের কোনো কল হিস্ট্রি নেই।" else "No call history entries for this number.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 14.dp)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(historyEntries, key = { it.id }) { entry ->
+                        val (dirLabel, dirTint) = when (entry.direction) {
+                            CallDirection.OUTGOING -> (if (isBn) "আউটগোয়িং" else "Outgoing") to nova.sim1
+                            CallDirection.INCOMING -> (if (isBn) "ইনকামিং" else "Incoming") to nova.sim2
+                            CallDirection.MISSED -> (if (isBn) "মিসড কল" else "Missed") to nova.missed
+                            CallDirection.REJECTED -> (if (isBn) "রিজেক্টেড" else "Rejected") to nova.missed
+                        }
+                        val routeSummary = when (entry.route) {
+                            CallRoute.SIM_2 -> "SIM 2 • ${state.sim2.carrierName}"
+                            CallRoute.ICC_SIP -> "ICC IP • ${state.preferences.iccSipServer}"
+                            else -> "SIM 1 • ${state.sim1.carrierName}"
+                        }
+                        val durationText = formatCallDuration(entry.durationSeconds, state.preferences.language)
+                            .ifEmpty { if (isBn) "০সে" else "0s" }
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(0.8.dp, nova.glassBorder.copy(alpha = 0.45f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "$dirLabel • $routeSummary",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = dirTint,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = dateFmt.format(Date(entry.timestamp)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    text = durationText,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                )
+                                IconButton(
+                                    onClick = { onDeleteSingleEntry(entry.id) },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.DeleteOutline,
+                                        contentDescription = strings.delete,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun ChooseLineBottomSheet(
     target: CallerDetailTarget,
     state: DialerUiState,
@@ -258,6 +521,7 @@ fun ChooseLineBottomSheet(
     onSelectRoute: (CallRoute) -> Unit
 ) {
     val nova = LocalNovaColors.current
+    val isBn = state.preferences.language == AppLanguage.BENGALI
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface
@@ -270,21 +534,27 @@ fun ChooseLineBottomSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = strings.chooseLineTitle,
-                style = MaterialTheme.typography.titleLarge,
+                text = if (isBn) "কোন সিম দিয়ে কল করবেন" else "Call with",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = target.name?.takeIf { it.isNotBlank() } ?: formatDisplayNumber(target.number),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = buildString {
+                    target.name?.takeIf { it.isNotBlank() }?.let {
+                        append(it)
+                        append(" • ")
+                    }
+                    append(formatDisplayNumber(target.number))
+                },
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = nova.sim1
             )
             Spacer(modifier = Modifier.height(4.dp))
 
             RouteOptionRow(
-                icon = Icons.Filled.Call,
-                title = "SIM 1 • ${state.sim1.displayName}",
-                subtitle = state.sim1.carrierName,
+                icon = Icons.Filled.SimCard,
+                title = "SIM 1",
+                subtitle = state.sim1.displayName.ifBlank { state.sim1.carrierName },
                 accent = nova.sim1,
                 container = nova.sim1Container,
                 onClick = {
@@ -294,8 +564,8 @@ fun ChooseLineBottomSheet(
             )
             RouteOptionRow(
                 icon = Icons.Filled.SimCard,
-                title = "SIM 2 • ${state.sim2.displayName}",
-                subtitle = state.sim2.carrierName,
+                title = "SIM 2",
+                subtitle = state.sim2.displayName.ifBlank { state.sim2.carrierName },
                 accent = nova.sim2,
                 container = nova.sim2Container,
                 onClick = {
@@ -303,6 +573,19 @@ fun ChooseLineBottomSheet(
                     onSelectRoute(CallRoute.SIM_2)
                 }
             )
+            if (state.preferences.iccSipEnabled) {
+                RouteOptionRow(
+                    icon = Icons.Filled.Language,
+                    title = if (isBn) "ICC IP কলিং (SIP)" else "ICC IP Calling (SIP)",
+                    subtitle = state.preferences.iccSipUsername.ifBlank { state.preferences.iccSipServer },
+                    accent = nova.brilliant,
+                    container = nova.brilliantContainer,
+                    onClick = {
+                        onDismiss()
+                        onSelectRoute(CallRoute.ICC_SIP)
+                    }
+                )
+            }
         }
     }
 }

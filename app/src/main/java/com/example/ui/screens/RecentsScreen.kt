@@ -37,10 +37,13 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.Search
@@ -105,6 +108,10 @@ fun RecentsScreen(
     onOpenSettings: () -> Unit,
     onRequestPermissions: () -> Unit,
     onCallRoute: (String, CallRoute, String?) -> Unit,
+    onRequestCallWith: (String, String?) -> Unit,
+    onOpenCallHistory: (String, String?) -> Unit,
+    onEditInKeypad: (String) -> Unit,
+    onToggleBlockNumber: (String, String?, Boolean) -> Unit,
     onOpenCallerDetail: (String, String?) -> Unit,
     onOpenTagCaller: (String, String?) -> Unit,
     onWhatsApp: (String) -> Unit,
@@ -116,7 +123,6 @@ fun RecentsScreen(
     val nova = LocalNovaColors.current
     val haptic = LocalHapticFeedback.current
     val isBn = state.preferences.language == AppLanguage.BENGALI
-    var expandedId by remember { mutableStateOf<String?>(null) }
     var editMode by remember { mutableStateOf(false) }
     var showFilterMenu by remember { mutableStateOf(false) }
 
@@ -383,6 +389,45 @@ fun RecentsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Horizontal Filter Chips: All | Missed | SIP VoIP | Cellular SIM (matching Screenshot 2 & 3)
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val chips = listOf(
+                    CallFilterType.ALL to (if (isBn) "সব" else "All"),
+                    CallFilterType.MISSED to (if (isBn) "মিসড" else "Missed"),
+                    CallFilterType.SIP_VOIP to (if (isBn) "ICC IP" else "SIP VoIP"),
+                    CallFilterType.CELLULAR to (if (isBn) "সিম কল" else "Cellular SIM")
+                )
+                items(chips, key = { it.first.name }) { (type, label) ->
+                    val active = state.recentsFilter == type
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onSelectFilter(type) }
+                            .testTag("recents_chip_${type.name.lowercase()}"),
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (active) MaterialTheme.colorScheme.primaryContainer else nova.glassSurface,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (active) MaterialTheme.colorScheme.primary else nova.glassBorder.copy(alpha = 0.7f)
+                        )
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                            ),
+                            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Truecaller-style Caller ID Status Strip + Gesture Tip
             Row(
                 modifier = Modifier
@@ -557,7 +602,6 @@ fun RecentsScreen(
                         ) {
                             CallLogCard(
                                 item = item,
-                                expanded = expandedId == item.id,
                                 editMode = editMode,
                                 isBlocked = isBlocked,
                                 isUnknownCaller = !isSavedContact,
@@ -567,21 +611,17 @@ fun RecentsScreen(
                                 sim2Label = state.sim2.displayName,
                                 strings = strings,
                                 language = state.preferences.language,
-                                onToggleExpand = {
-                                    expandedId = if (expandedId == item.id) null else item.id
-                                },
+                                onOpenCallHistory = { onOpenCallHistory(item.number, item.contactName) },
+                                onEditInKeypad = { onEditInKeypad(item.number) },
+                                onToggleBlock = { onToggleBlockNumber(item.number, item.contactName, isBlocked) },
                                 onDeleteClick = { onDeleteCallLog(item) },
                                 onLongPress = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onLongPressCallOptions(item)
                                 },
-                                onCallRoute = { route ->
-                                    onCallRoute(item.number, route, item.contactName)
-                                },
-                                onWhatsApp = { onWhatsApp(item.number) },
-                                onAddNote = { onOpenNoteDialog(item.number, item.contactName) },
-                                onTagCaller = { onOpenTagCaller(item.number, item.contactName) },
-                                onOpenDetail = { onOpenCallerDetail(item.number, item.contactName) }
+                                onQuickCall = {
+                                    onRequestCallWith(item.number, item.contactName)
+                                }
                             )
                         }
                     }
@@ -595,7 +635,6 @@ fun RecentsScreen(
 @Composable
 private fun CallLogCard(
     item: CallLogItem,
-    expanded: Boolean,
     editMode: Boolean,
     isBlocked: Boolean,
     isUnknownCaller: Boolean,
@@ -605,17 +644,16 @@ private fun CallLogCard(
     sim2Label: String,
     strings: NovaStrings,
     language: AppLanguage,
-    onToggleExpand: () -> Unit,
+    onOpenCallHistory: () -> Unit,
+    onEditInKeypad: () -> Unit,
+    onToggleBlock: () -> Unit,
     onDeleteClick: () -> Unit,
     onLongPress: () -> Unit,
-    onCallRoute: (CallRoute) -> Unit,
-    onWhatsApp: () -> Unit,
-    onAddNote: () -> Unit,
-    onTagCaller: () -> Unit,
-    onOpenDetail: () -> Unit
+    onQuickCall: () -> Unit
 ) {
     val nova = LocalNovaColors.current
     val isBn = language == AppLanguage.BENGALI
+    var menuExpanded by remember { mutableStateOf(false) }
     val (dirIcon, dirColor, dirText) = when (item.direction) {
         CallDirection.INCOMING -> Triple(Icons.AutoMirrored.Filled.CallReceived, nova.sim1, strings.incoming)
         CallDirection.OUTGOING -> Triple(Icons.AutoMirrored.Filled.CallMade, nova.sim2, strings.outgoing)
@@ -631,7 +669,7 @@ private fun CallLogCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .combinedClickable(
-                onClick = onToggleExpand,
+                onClick = onOpenCallHistory,
                 onLongClick = onLongPress
             )
             .testTag("call_log_card_${item.id}"),
@@ -641,7 +679,6 @@ private fun CallLogCard(
             width = 1.dp,
             color = when {
                 isBlocked -> nova.missed.copy(alpha = 0.55f)
-                expanded -> nova.gold.copy(alpha = 0.5f)
                 else -> nova.glassBorder.copy(alpha = 0.65f)
             }
         )
@@ -789,108 +826,143 @@ private fun CallLogCard(
                     }
                 }
                 Spacer(modifier = Modifier.width(6.dp))
-                // One-tap Call circle (matching Screenshot 8)
-                val safeRoute = if (item.route == CallRoute.SIM_2) CallRoute.SIM_2 else CallRoute.SIM_1
-                val quickBg = if (safeRoute == CallRoute.SIM_2) nova.sim2Container else nova.sim1Container
-                val quickTint = if (safeRoute == CallRoute.SIM_2) nova.sim2 else nova.sim1
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(quickBg)
-                        .clickable { onCallRoute(safeRoute) },
-                    contentAlignment = Alignment.Center
+                // Call Button + Three-Dot Menu (matching Screenshot 2)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Call,
-                        contentDescription = strings.call,
-                        tint = quickTint,
-                        modifier = Modifier.size(19.dp)
-                    )
-                }
-            }
-
-            AnimatedVisibility(visible = expanded) {
-                Column {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(color = nova.glassBorder.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                    val quickBg = when (item.route) {
+                        CallRoute.SIM_2 -> nova.sim2Container
+                        CallRoute.ICC_SIP -> nova.brilliantContainer
+                        else -> nova.sim1Container
+                    }
+                    val quickTint = when (item.route) {
+                        CallRoute.SIM_2 -> nova.sim2
+                        CallRoute.ICC_SIP -> nova.brilliant
+                        else -> nova.sim1
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(quickBg)
+                            .clickable(onClick = onQuickCall)
+                            .testTag("recent_call_button_${item.id}"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        ExpandedActionPill(
-                            icon = Icons.Filled.Call,
-                            label = "SIM 1",
-                            tint = nova.sim1,
-                            onClick = { onCallRoute(CallRoute.SIM_1) }
+                        Icon(
+                            imageVector = Icons.Filled.Call,
+                            contentDescription = strings.call,
+                            tint = quickTint,
+                            modifier = Modifier.size(19.dp)
                         )
-                        ExpandedActionPill(
-                            icon = Icons.Filled.SimCard,
-                            label = "SIM 2",
-                            tint = nova.sim2,
-                            onClick = { onCallRoute(CallRoute.SIM_2) }
-                        )
-                        ExpandedActionPill(
-                            icon = Icons.AutoMirrored.Filled.Message,
-                            label = "WA",
-                            tint = nova.whatsApp,
-                            onClick = onWhatsApp
-                        )
-                        if (isUnknownCaller) {
-                            ExpandedActionPill(
-                                icon = Icons.Filled.VerifiedUser,
-                                label = if (isBn) "নাম দিন" else "ID Tag",
-                                tint = Color(0xFF0087FF),
-                                onClick = onTagCaller
-                            )
-                        } else {
-                            ExpandedActionPill(
-                                icon = Icons.Filled.StickyNote2,
-                                label = strings.callerNotePrefix,
-                                tint = nova.gold,
-                                onClick = onAddNote
+                    }
+                    Box {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("recent_more_menu_${item.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = if (isBn) "আরও অপশন" else "More options",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-                        ExpandedActionPill(
-                            icon = Icons.Filled.Info,
-                            label = if (isBn) "বিস্তারিত" else "Info",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            onClick = onOpenDetail
-                        )
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isBn) "কল হিস্ট্রি" else "Call history",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.History,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenCallHistory()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isBn) "কি-প্যাডে এডিট" else "Edit in keypad",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Dialpad,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onEditInKeypad()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isBlocked) {
+                                            if (isBn) "আনব্লক" else "Unblock"
+                                        } else {
+                                            if (isBn) "ব্লক" else "Block"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = nova.missed
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Block,
+                                        contentDescription = null,
+                                        tint = nova.missed,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onToggleBlock()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isBn) "ডিলিট হিস্ট্রি" else "Delete History",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                        color = nova.missed
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = null,
+                                        tint = nova.missed,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDeleteClick()
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ExpandedActionPill(
-    icon: ImageVector,
-    label: String,
-    tint: Color,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
     }
 }

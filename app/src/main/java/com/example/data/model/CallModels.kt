@@ -6,7 +6,8 @@ import androidx.compose.runtime.Immutable
 enum class CallRoute {
     SIM_1,
     SIM_2,
-    BRILLIANT
+    BRILLIANT,
+    ICC_SIP
 }
 
 enum class DefaultRoutePreference {
@@ -33,6 +34,8 @@ enum class KeypadSoundStyle {
 enum class CallFilterType {
     ALL,
     MISSED,
+    SIP_VOIP,
+    CELLULAR,
     BRILLIANT,
     OUTGOING,
     INCOMING
@@ -193,7 +196,17 @@ data class UserPreferences(
     val fontScale: AppFontScale = AppFontScale.MEDIUM,
     val incomingCallDisplayStyle: IncomingCallDisplayStyle = IncomingCallDisplayStyle.FULL_SCREEN,
     val slideToAnswerMode: SlideToAnswerMode = SlideToAnswerMode.LOCKED_ONLY,
-    val favoriteNumbers: Set<String> = emptySet()
+    val favoriteNumbers: Set<String> = emptySet(),
+    val sim1BalanceUssd: String = "",
+    val sim2BalanceUssd: String = "",
+    val customRingtoneUri: String = "",
+    val customRingtoneTitle: String = "",
+    val iccSipEnabled: Boolean = false,
+    val iccSipServer: String = "sip.icc.com.bd",
+    val iccSipPort: Int = 5060,
+    val iccSipUsername: String = "",
+    val iccSipPassword: String = "",
+    val iccIspCustomerId: String = ""
 ) {
     companion object {
         val DEFAULT_QUICK_REPLIES = listOf(

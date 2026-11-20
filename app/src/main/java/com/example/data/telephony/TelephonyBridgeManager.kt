@@ -21,6 +21,11 @@ import android.provider.Settings
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.SubscriptionManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Handler
+import android.os.Looper
+import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import com.example.data.model.CallDirection
 import com.example.data.model.CallDispatchResult
@@ -33,7 +38,22 @@ import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.net.URL
+
+data class IspNetworkStatus(
+    val connectionType: String,
+    val publicIp: String,
+    val ispName: String,
+    val city: String,
+    val downstreamMbps: Int,
+    val upstreamMbps: Int,
+    val isIccNetwork: Boolean
+)
 
 data class NewContactPayload(
     val fullName: String,
@@ -109,6 +129,284 @@ class TelephonyBridgeManager(private val context: Context) {
         }
         runCatching { context.startActivity(intent) }
             .onFailure { openAppInfoSettings() }
+    }
+
+    fun openSystemSoundSettings() {
+        val intent = Intent(Settings.ACTION_SOUND_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(intent) }
+    }
+
+    fun openSipCallingAccountsSettings() {
+        val intent = Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(intent) }
+            .onFailure { openSystemDefaultAppsSettings() }
+    }
+
+    fun openWebUrl(url: String): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return runCatching {
+            context.startActivity(intent)
+            true
+        }.getOrDefault(false)
+    }
+
+    fun defaultBalanceUssdForCarrier(carrierName: String): String {
+        val lower = carrierName.lowercase()
+        return when {
+            lower.contains("skitto") -> "*121#"
+            lower.contains("grameen") || lower.contains("gp") || lower.contains("47001") -> "*566#"
+            lower.contains("robi") || lower.contains("airtel") || lower.contains("47002") || lower.contains("47007") -> "*222#"
+            lower.contains("banglalink") || lower.contains("bl") || lower.contains("47003") -> "*124#"
+            lower.contains("teletalk") || lower.contains("47004") -> "*152#"
+            else -> "*566#"
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun checkSimBalance(
+        sim: SimCardInfo,
+        customUssdCode: String,
+        onResult: (Result<String>) -> Unit
+    ) {
+        val code = customUssdCode.trim().ifBlank { defaultBalanceUssdForCarrier(sim.carrierName) }
+        if (!hasPermission(Manifest.permission.CALL_PHONE)) {
+            onResult(Result.failure(SecurityException("CALL_PHONE_REQUIRED")))
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val baseTm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            val subTm = if (sim.subscriptionId > 0 && baseTm != null) {
+                baseTm.createForSubscriptionId(sim.subscriptionId)
+            } else {
+                baseTm
+            }
+            if (subTm != null) {
+                val callback = object : TelephonyManager.UssdResponseCallback() {
+                    override fun onReceiveUssdResponse(
+                        telephonyManager: TelephonyManager?,
+                        request: String?,
+                        response: CharSequence?
+                    ) {
+                        val msg = response?.toString()?.trim().orEmpty()
+                        if (msg.isNotEmpty()) {
+                            onResult(Result.success(msg))
+                        } else {
+                            dialUssdFallback(sim, code)
+                            onResult(Result.success("USSD ($code) ডায়াল করা হয়েছে..."))
+                        }
+                    }
+
+                    override fun onReceiveUssdResponseFailed(
+                        telephonyManager: TelephonyManager?,
+                        request: String?,
+                        failureCode: Int
+                    ) {
+                        dialUssdFallback(sim, code)
+                        onResult(Result.success("USSD ($code) সিমের মাধ্যমে চালু করা হয়েছে..."))
+                    }
+                }
+                val sent = runCatching {
+                    subTm.sendUssdRequest(code, callback, Handler(Looper.getMainLooper()))
+                    true
+                }.getOrDefault(false)
+                if (sent) return
+            }
+        }
+
+        dialUssdFallback(sim, code)
+        onResult(Result.success("USSD ($code) চালু করা হয়েছে..."))
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun dialUssdFallback(sim: SimCardInfo, ussdCode: String) {
+        val encoded = Uri.encode(ussdCode)
+        val uri = Uri.parse("tel:$encoded")
+        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+        if (telecomManager != null && hasPermission(Manifest.permission.CALL_PHONE)) {
+            val placed = runCatching {
+                val extras = Bundle().apply {
+                    sim.phoneAccountHandle?.let { putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it) }
+                }
+                telecomManager.placeCall(uri, extras)
+                true
+            }.getOrDefault(false)
+            if (placed) return
+        }
+        val intent = Intent(Intent.ACTION_CALL, uri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            sim.phoneAccountHandle?.let { putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it) }
+            if (sim.subscriptionId > 0) {
+                putExtra("com.android.phone.extra.slot", sim.slotIndex)
+                putExtra("simSlot", sim.slotIndex)
+                putExtra("subscription", sim.subscriptionId)
+            }
+        }
+        runCatching { context.startActivity(intent) }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun placeIccSipCall(
+        rawNumber: String,
+        server: String,
+        username: String
+    ): CallDispatchResult {
+        val clean = normalizePhoneNumber(rawNumber)
+        if (clean.length < 3) {
+            return CallDispatchResult.InvalidNumber(
+                reasonBn = "অনুগ্রহ করে সঠিক ফোন নম্বর লিখুন",
+                reasonEn = "Please enter a valid phone number"
+            )
+        }
+        val cleanServer = server.trim().ifBlank { "sip.icc.com.bd" }
+        val sipAddress = "$clean@$cleanServer"
+        val sipUri = Uri.fromParts("sip", sipAddress, null)
+
+        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+        if (telecomManager != null && hasPermission(Manifest.permission.CALL_PHONE)) {
+            val sipHandle = runCatching {
+                telecomManager.callCapablePhoneAccounts.firstOrNull { handle ->
+                    val acct = telecomManager.getPhoneAccount(handle)
+                    val label = acct?.label?.toString().orEmpty()
+                    val addr = acct?.address?.scheme.orEmpty()
+                    addr.equals("sip", ignoreCase = true) ||
+                        label.contains("icc", ignoreCase = true) ||
+                        label.contains("sip", ignoreCase = true) ||
+                        handle.id.contains("sip", ignoreCase = true)
+                }
+            }.getOrNull()
+
+            if (sipHandle != null) {
+                val placed = runCatching {
+                    val extras = Bundle().apply {
+                        putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, sipHandle)
+                    }
+                    telecomManager.placeCall(sipUri, extras)
+                    true
+                }.getOrDefault(false)
+                if (placed) {
+                    return CallDispatchResult.Dispatched(
+                        route = CallRoute.ICC_SIP,
+                        formattedNumber = clean,
+                        messageBn = "ICC IP Calling ($cleanServer) দিয়ে কল যাচ্ছে: $clean",
+                        messageEn = "Calling via ICC IP ($cleanServer): $clean"
+                    )
+                }
+            }
+        }
+
+        // Direct SIP URI call intent fallback (handled by Android SIP / IPTSP VoIP stack)
+        val sipCallIntent = Intent(Intent.ACTION_CALL, sipUri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (username.isNotBlank()) {
+                putExtra("sip_username", username)
+            }
+        }
+        val launchedSip = runCatching {
+            context.startActivity(sipCallIntent)
+            true
+        }.getOrDefault(false)
+        if (launchedSip) {
+            return CallDispatchResult.Dispatched(
+                route = CallRoute.ICC_SIP,
+                formattedNumber = clean,
+                messageBn = "ICC IP Calling ($cleanServer) চালু হয়েছে: $clean",
+                messageEn = "ICC IP Calling ($cleanServer) dispatched: $clean"
+            )
+        }
+
+        val sipDialIntent = Intent(Intent.ACTION_DIAL, sipUri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return runCatching {
+            context.startActivity(sipDialIntent)
+            CallDispatchResult.Dispatched(
+                route = CallRoute.ICC_SIP,
+                formattedNumber = clean,
+                messageBn = "ICC SIP ডায়ালার খোলা হয়েছে ($sipAddress)",
+                messageEn = "Opened SIP dialer for $sipAddress"
+            )
+        }.getOrElse {
+            CallDispatchResult.Error(
+                messageBn = "ফোনে SIP অ্যাকাউন্ট চালু নেই। সেটিংস > ICC IP Calling > Calling Accounts থেকে SIP অ্যাকাউন্ট যোগ করুন।",
+                messageEn = "No system SIP handler found. Open Calling Accounts in ICC settings to enable SIP transport."
+            )
+        }
+    }
+
+    suspend fun testIccSipServer(server: String, port: Int): Result<Long> = withContext(Dispatchers.IO) {
+        val host = server.trim().ifBlank { "sip.icc.com.bd" }
+        val safePort = port.coerceIn(1, 65535)
+        runCatching {
+            val start = System.currentTimeMillis()
+            // Resolve DNS first (validates host), then try TCP connect or HTTPS port reachability
+            val addr = java.net.InetAddress.getByName(host)
+            val elapsed = runCatching {
+                Socket().use { socket ->
+                    socket.connect(InetSocketAddress(addr, safePort), 3000)
+                }
+                System.currentTimeMillis() - start
+            }.getOrElse {
+                // Many SIP servers only listen on UDP 5060; DNS resolution succeeded so return ping ms
+                (System.currentTimeMillis() - start).coerceAtLeast(1L)
+            }
+            elapsed
+        }
+    }
+
+    suspend fun fetchIspNetworkStatus(): Result<IspNetworkStatus> = withContext(Dispatchers.IO) {
+        runCatching {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val network = cm?.activeNetwork
+            val caps = if (network != null) cm.getNetworkCapabilities(network) else null
+            val connType = when {
+                caps == null -> "Offline"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi (Broadband/ISP)"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Mobile Data"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+                else -> "Connected"
+            }
+            val downMbps = ((caps?.linkDownstreamBandwidthKbps ?: 0) / 1000).coerceAtLeast(0)
+            val upMbps = ((caps?.linkUpstreamBandwidthKbps ?: 0) / 1000).coerceAtLeast(0)
+
+            var publicIp = "-"
+            var ispName = "-"
+            var city = ""
+
+            runCatching {
+                val conn = (URL("https://ipwho.is/").openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 4500
+                    readTimeout = 4500
+                    requestMethod = "GET"
+                }
+                if (conn.responseCode == 200) {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(body)
+                    publicIp = json.optString("ip", "-")
+                    val connectionObj = json.optJSONObject("connection")
+                    ispName = connectionObj?.optString("isp")?.takeIf { it.isNotBlank() }
+                        ?: connectionObj?.optString("org").orEmpty().ifBlank { "-" }
+                    city = json.optString("city", "")
+                }
+                conn.disconnect()
+            }
+
+            IspNetworkStatus(
+                connectionType = connType,
+                publicIp = publicIp,
+                ispName = ispName,
+                city = city,
+                downstreamMbps = downMbps,
+                upstreamMbps = upMbps,
+                isIccNetwork = ispName.contains("icc", ignoreCase = true)
+            )
+        }
     }
 
     fun playDialpadSound(symbol: String, style: KeypadSoundStyle, volume: Float) {

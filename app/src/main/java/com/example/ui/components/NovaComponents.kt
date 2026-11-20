@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SimCard
@@ -145,6 +146,7 @@ fun RouteBadge(
     val nova = LocalNovaColors.current
     val (bg, fg, text, icon) = when (route) {
         CallRoute.SIM_2 -> Quad(nova.sim2Container, nova.sim2, sim2Label.take(10), Icons.Filled.SimCard)
+        CallRoute.ICC_SIP -> Quad(nova.brilliantContainer, nova.brilliant, "ICC SIP", Icons.Filled.Language)
         else -> Quad(nova.sim1Container, nova.sim1, sim1Label.take(10), Icons.Filled.SimCard)
     }
 

@@ -133,9 +133,11 @@ jobs:
           RELEASE_NOTES="Tap Shajamal.apk below to download and install directly on your Android phone.
 
           Latest updates:
-          - Grouped Recents Call History with Call Counter: Repeated calls to/from the same number now appear in a single clean row with the exact call count badge like (2), (10), (15), (20) right next to the name
-          - 10 Rich Color Themes (added Sunset Gold, Midnight Rose, Cyber Indigo, and Mint Breeze Light) + 6 Lightweight Vector Theme Doodle Backgrounds (Phone Doodle, Cosmic Stars, Floral Leaves, Geometric Waves, Hearts & Sparkle, Off)
-          - 3x-5x Faster Startup & Buttery-Smooth 60fps UI with Liquid Glass Call Screen, Favorites Tab, Display Options, A-Z Contacts & Truecaller Caller ID"
+          - Recents Tap -> Call History (N) Bottom Sheet: Tap any grouped number to view full call history (Outgoing/Incoming/Missed, SIM/Carrier, date/time, duration, single-entry delete), Call Now, Edit Number, and Block/Unblock
+          - Keypad 'Call with' Bottom Sheet: Tap the primary Call button to choose SIM 1, SIM 2, or ICC IP Calling (SIP)
+          - Recents 3-Dot (⋮) Menu & Filter Chips: Quick Call button + 3-dot menu (Call history, Edit in keypad, Block, Delete History) and All / Missed / SIP VoIP / Cellular SIM filters
+          - SIM 1 & SIM 2 Balance Check (live USSD) + ICC Communication IP Calling (SIP) & ISP Status/Portal
+          - Streamlined Settings: Unified Theme & Doodle card (White/Black/System + 10 color themes + 6 doodles), Call Ringtone & Dialpad Tone picker, Notifications & Vibration, Block List, and Language"
 
           if gh release view latest-apk >/dev/null 2>&1; then
             gh release upload latest-apk Shajamal.apk --clobber

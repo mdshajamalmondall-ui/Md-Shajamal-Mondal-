@@ -61,6 +61,16 @@ class PreferencesRepository(private val context: Context) {
         val INCOMING_CALL_STYLE = stringPreferencesKey("incoming_call_style")
         val SLIDE_TO_ANSWER = stringPreferencesKey("slide_to_answer_mode")
         val FAVORITE_NUMBERS = stringPreferencesKey("favorite_numbers_v1")
+        val SIM1_BALANCE_USSD = stringPreferencesKey("sim1_balance_ussd")
+        val SIM2_BALANCE_USSD = stringPreferencesKey("sim2_balance_ussd")
+        val CUSTOM_RINGTONE_URI = stringPreferencesKey("custom_ringtone_uri")
+        val CUSTOM_RINGTONE_TITLE = stringPreferencesKey("custom_ringtone_title")
+        val ICC_SIP_ENABLED = booleanPreferencesKey("icc_sip_enabled")
+        val ICC_SIP_SERVER = stringPreferencesKey("icc_sip_server")
+        val ICC_SIP_PORT = stringPreferencesKey("icc_sip_port")
+        val ICC_SIP_USERNAME = stringPreferencesKey("icc_sip_username")
+        val ICC_SIP_PASSWORD = stringPreferencesKey("icc_sip_password")
+        val ICC_ISP_CUSTOMER_ID = stringPreferencesKey("icc_isp_customer_id")
     }
 
     val preferencesFlow: Flow<UserPreferences> = context.novaDataStore.data.map { prefs ->
@@ -136,7 +146,17 @@ class PreferencesRepository(private val context: Context) {
                 ?.map { it.trim() }
                 ?.filter { it.isNotEmpty() }
                 ?.toSet()
-                ?: emptySet()
+                ?: emptySet(),
+            sim1BalanceUssd = prefs[Keys.SIM1_BALANCE_USSD] ?: "",
+            sim2BalanceUssd = prefs[Keys.SIM2_BALANCE_USSD] ?: "",
+            customRingtoneUri = prefs[Keys.CUSTOM_RINGTONE_URI] ?: "",
+            customRingtoneTitle = prefs[Keys.CUSTOM_RINGTONE_TITLE] ?: "",
+            iccSipEnabled = prefs[Keys.ICC_SIP_ENABLED] ?: false,
+            iccSipServer = prefs[Keys.ICC_SIP_SERVER]?.takeIf { it.isNotBlank() } ?: "sip.icc.com.bd",
+            iccSipPort = prefs[Keys.ICC_SIP_PORT]?.toIntOrNull()?.coerceIn(1, 65535) ?: 5060,
+            iccSipUsername = prefs[Keys.ICC_SIP_USERNAME] ?: "",
+            iccSipPassword = prefs[Keys.ICC_SIP_PASSWORD] ?: "",
+            iccIspCustomerId = prefs[Keys.ICC_ISP_CUSTOMER_ID] ?: ""
         )
     }
 
@@ -299,6 +319,38 @@ class PreferencesRepository(private val context: Context) {
     suspend fun updateQuickReplies(replies: List<String>) {
         context.novaDataStore.edit {
             it[Keys.QUICK_REPLIES] = replies.map { r -> r.trim() }.filter { r -> r.isNotEmpty() }.joinToString("\n")
+        }
+    }
+
+    suspend fun updateSimBalanceUssd(slotIndex: Int, ussdCode: String) {
+        context.novaDataStore.edit {
+            if (slotIndex == 0) it[Keys.SIM1_BALANCE_USSD] = ussdCode.trim()
+            else it[Keys.SIM2_BALANCE_USSD] = ussdCode.trim()
+        }
+    }
+
+    suspend fun updateCustomRingtone(uri: String, title: String) {
+        context.novaDataStore.edit {
+            it[Keys.CUSTOM_RINGTONE_URI] = uri.trim()
+            it[Keys.CUSTOM_RINGTONE_TITLE] = title.trim()
+        }
+    }
+
+    suspend fun updateIccSipConfig(
+        enabled: Boolean,
+        server: String,
+        port: Int,
+        username: String,
+        password: String,
+        ispCustomerId: String
+    ) {
+        context.novaDataStore.edit {
+            it[Keys.ICC_SIP_ENABLED] = enabled
+            it[Keys.ICC_SIP_SERVER] = server.trim().ifBlank { "sip.icc.com.bd" }
+            it[Keys.ICC_SIP_PORT] = port.coerceIn(1, 65535).toString()
+            it[Keys.ICC_SIP_USERNAME] = username.trim()
+            it[Keys.ICC_SIP_PASSWORD] = password
+            it[Keys.ICC_ISP_CUSTOMER_ID] = ispCustomerId.trim()
         }
     }
 }

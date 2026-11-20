@@ -44,6 +44,7 @@ import com.example.data.model.SlideToAnswerMode
 import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
 import com.example.data.telephony.CallNotificationHelper
+import com.example.data.telephony.IspNetworkStatus
 import com.example.data.telephony.NewContactPayload
 import com.example.data.telephony.TelephonyBridgeManager
 import com.google.firebase.FirebaseApp
@@ -132,9 +133,17 @@ data class DialerUiState(
     val isDialedBlocked: Boolean = false,
     val todayCallCount: Int = 0,
     val selectedCallerDetail: CallerDetailTarget? = null,
+    val callHistoryTarget: CallerDetailTarget? = null,
     val routePickerTarget: CallerDetailTarget? = null,
     val isLoadingSystemData: Boolean = false,
-    val cloudCallerId: CloudCallerIdSnapshot = CloudCallerIdSnapshot()
+    val cloudCallerId: CloudCallerIdSnapshot = CloudCallerIdSnapshot(),
+    val sim1BalanceText: String? = null,
+    val sim2BalanceText: String? = null,
+    val checkingBalanceSlot: Int? = null,
+    val iccSipStatusText: String? = null,
+    val isTestingIccSip: Boolean = false,
+    val ispNetworkStatus: IspNetworkStatus? = null,
+    val isCheckingIsp: Boolean = false
 ) {
     val sim1: SimCardInfo
         get() = simCards.firstOrNull { it.slotIndex == 0 }
@@ -174,7 +183,18 @@ private data class UiInputSnapshot(
     val recentsSearchQuery: String,
     val recentsFilter: CallFilterType,
     val selectedCallerDetail: CallerDetailTarget?,
+    val callHistoryTarget: CallerDetailTarget?,
     val routePickerTarget: CallerDetailTarget?
+)
+
+private data class DiagnosticsSnapshot(
+    val sim1BalanceText: String? = null,
+    val sim2BalanceText: String? = null,
+    val checkingBalanceSlot: Int? = null,
+    val iccSipStatusText: String? = null,
+    val isTestingIccSip: Boolean = false,
+    val ispNetworkStatus: IspNetworkStatus? = null,
+    val isCheckingIsp: Boolean = false
 )
 
 class DialerViewModel(
@@ -192,7 +212,15 @@ class DialerViewModel(
     private val recentsSearchQuery = MutableStateFlow("")
     private val recentsFilter = MutableStateFlow(CallFilterType.ALL)
     private val selectedCallerDetail = MutableStateFlow<CallerDetailTarget?>(null)
+    private val callHistoryTarget = MutableStateFlow<CallerDetailTarget?>(null)
     private val routePickerTarget = MutableStateFlow<CallerDetailTarget?>(null)
+    private val sim1BalanceText = MutableStateFlow<String?>(null)
+    private val sim2BalanceText = MutableStateFlow<String?>(null)
+    private val checkingBalanceSlot = MutableStateFlow<Int?>(null)
+    private val iccSipStatusText = MutableStateFlow<String?>(null)
+    private val isTestingIccSip = MutableStateFlow(false)
+    private val ispNetworkStatus = MutableStateFlow<IspNetworkStatus?>(null)
+    private val isCheckingIsp = MutableStateFlow(false)
 
     @Volatile
     private var callerIdRepository: CallerIdRepository? = null
@@ -262,12 +290,30 @@ class DialerViewModel(
         LocalRoomSnapshot(speedDials, blocked, notes, records, prefs)
     }
 
+    private val diagnosticsFlow = combine(
+        combine(sim1BalanceText, sim2BalanceText, checkingBalanceSlot) { b1, b2, slot -> Triple(b1, b2, slot) },
+        combine(iccSipStatusText, isTestingIccSip, ispNetworkStatus, isCheckingIsp) { sipTxt, testing, isp, checking ->
+            DiagnosticsSnapshot(
+                iccSipStatusText = sipTxt,
+                isTestingIccSip = testing,
+                ispNetworkStatus = isp,
+                isCheckingIsp = checking
+            )
+        }
+    ) { bal, net ->
+        net.copy(
+            sim1BalanceText = bal.first,
+            sim2BalanceText = bal.second,
+            checkingBalanceSlot = bal.third
+        )
+    }
+
     private val uiInputFlow = combine(
         combine(activeTab, isSettingsOpen) { t, s -> t to s },
         dialedDigits,
         combine(contactSearchQuery, recentsSearchQuery) { cq, rq -> cq to rq },
         recentsFilter,
-        combine(selectedCallerDetail, routePickerTarget) { d, r -> d to r }
+        combine(selectedCallerDetail, callHistoryTarget, routePickerTarget) { d, h, r -> Triple(d, h, r) }
     ) { nav, digits, queries, filter, overlays ->
         UiInputSnapshot(
             activeTab = nav.first,
@@ -277,7 +323,8 @@ class DialerViewModel(
             recentsSearchQuery = queries.second,
             recentsFilter = filter,
             selectedCallerDetail = overlays.first,
-            routePickerTarget = overlays.second
+            callHistoryTarget = overlays.second,
+            routePickerTarget = overlays.third
         )
     }
 
@@ -285,8 +332,9 @@ class DialerViewModel(
         roomSnapshotFlow,
         combine(systemSnapshot, hiddenCallLogIds) { sys, hidden -> sys to hidden },
         uiInputFlow,
-        cloudSnapshotFlow
-    ) { room, sysPair, input, cloud ->
+        cloudSnapshotFlow,
+        diagnosticsFlow
+    ) { room, sysPair, input, cloud, diag ->
         val sys = sysPair.first
         val hiddenIds = sysPair.second
 
@@ -381,9 +429,17 @@ class DialerViewModel(
             isDialedBlocked = isBlocked,
             todayCallCount = lastTodayCount,
             selectedCallerDetail = input.selectedCallerDetail,
+            callHistoryTarget = input.callHistoryTarget,
             routePickerTarget = input.routePickerTarget,
             isLoadingSystemData = sys.isLoading,
-            cloudCallerId = cloud
+            cloudCallerId = cloud,
+            sim1BalanceText = diag.sim1BalanceText,
+            sim2BalanceText = diag.sim2BalanceText,
+            checkingBalanceSlot = diag.checkingBalanceSlot,
+            iccSipStatusText = diag.iccSipStatusText,
+            isTestingIccSip = diag.isTestingIccSip,
+            ispNetworkStatus = diag.ispNetworkStatus,
+            isCheckingIsp = diag.isCheckingIsp
         )
     }
         .flowOn(Dispatchers.Default)
@@ -702,6 +758,108 @@ class DialerViewModel(
 
     fun openSystemDefaultAppsSettings() = telephony.openSystemDefaultAppsSettings()
 
+    fun openSystemSoundSettings() = telephony.openSystemSoundSettings()
+
+    fun openSipCallingAccountsSettings() = telephony.openSipCallingAccountsSettings()
+
+    fun openWebUrl(url: String) {
+        telephony.openWebUrl(url)
+    }
+
+    fun defaultBalanceUssdForSlot(slotIndex: Int): String {
+        val state = uiState.value
+        val custom = if (slotIndex == 0) state.preferences.sim1BalanceUssd else state.preferences.sim2BalanceUssd
+        if (custom.isNotBlank()) return custom
+        val sim = if (slotIndex == 0) state.sim1 else state.sim2
+        return telephony.defaultBalanceUssdForCarrier(sim.carrierName)
+    }
+
+    fun checkSimBalance(slotIndex: Int) {
+        val state = uiState.value
+        val isBn = state.preferences.language == AppLanguage.BENGALI
+        val sim = if (slotIndex == 1) state.sim2 else state.sim1
+        val customUssd = if (slotIndex == 1) state.preferences.sim2BalanceUssd else state.preferences.sim1BalanceUssd
+        checkingBalanceSlot.value = slotIndex
+        telephony.checkSimBalance(sim, customUssd) { result ->
+            checkingBalanceSlot.value = null
+            result.onSuccess { message ->
+                if (slotIndex == 1) sim2BalanceText.value = message else sim1BalanceText.value = message
+            }.onFailure { err ->
+                val text = if (err is SecurityException) {
+                    if (isBn) "ব্যালেন্স চেক করতে আগে ফোন পারমিশন দিন" else "Grant Phone permission first to check balance"
+                } else {
+                    if (isBn) "ব্যালেন্স চেক ব্যর্থ হয়েছে" else "Balance check failed"
+                }
+                if (slotIndex == 1) sim2BalanceText.value = text else sim1BalanceText.value = text
+                emitMessage(text)
+            }
+        }
+    }
+
+    fun updateSimBalanceUssd(slotIndex: Int, code: String) = viewModelScope.launch {
+        repository.updateSimBalanceUssd(slotIndex, code)
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(if (isBn) "SIM ${slotIndex + 1} ব্যালেন্স কোড সেভ হয়েছে" else "SIM ${slotIndex + 1} balance code saved")
+    }
+
+    fun updateCustomRingtone(uri: String, title: String) = viewModelScope.launch {
+        repository.updateCustomRingtone(uri, title)
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(if (isBn) "কল টোন সেট হয়েছে: $title" else "Ringtone set: $title")
+    }
+
+    fun saveIccSipConfig(
+        enabled: Boolean,
+        server: String,
+        port: Int,
+        username: String,
+        password: String,
+        ispCustomerId: String
+    ) = viewModelScope.launch {
+        repository.updateIccSipConfig(enabled, server, port, username, password, ispCustomerId)
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(
+            if (isBn) "ICC Communication IP ও ISP তথ্য সেভ হয়েছে"
+            else "ICC Communication IP & ISP settings saved"
+        )
+    }
+
+    fun testIccSipServer(server: String, port: Int) {
+        viewModelScope.launch {
+            val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+            isTestingIccSip.value = true
+            val res = telephony.testIccSipServer(server, port)
+            isTestingIccSip.value = false
+            res.onSuccess { ms ->
+                iccSipStatusText.value = if (isBn) {
+                    "সার্ভার সক্রিয় ($server:$port • ${ms}ms)"
+                } else {
+                    "Server reachable ($server:$port • ${ms}ms)"
+                }
+            }.onFailure { err ->
+                iccSipStatusText.value = if (isBn) {
+                    "সার্ভার পাওয়া যায়নি: ${err.localizedMessage ?: "নেটওয়ার্ক চেক করুন"}"
+                } else {
+                    "Server unreachable: ${err.localizedMessage ?: "Check internet"}"
+                }
+            }
+        }
+    }
+
+    fun refreshIspNetworkStatus() {
+        viewModelScope.launch {
+            isCheckingIsp.value = true
+            val res = telephony.fetchIspNetworkStatus()
+            isCheckingIsp.value = false
+            res.onSuccess { status ->
+                ispNetworkStatus.value = status
+            }.onFailure {
+                val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+                emitMessage(if (isBn) "ISP নেটওয়ার্ক তথ্য পাওয়া যায়নি" else "Could not fetch ISP status")
+            }
+        }
+    }
+
     fun openSettings() {
         isSettingsOpen.value = true
     }
@@ -801,10 +959,31 @@ class DialerViewModel(
         selectedCallerDetail.value = null
     }
 
-    fun openRoutePicker(number: String, name: String?) {
-        routePickerTarget.value = CallerDetailTarget(
+    fun openCallHistory(number: String, name: String?) {
+        callHistoryTarget.value = CallerDetailTarget(
             number = number,
             normalizedNumber = normalizePhoneNumber(number),
+            name = name
+        )
+    }
+
+    fun closeCallHistory() {
+        callHistoryTarget.value = null
+    }
+
+    fun openRoutePicker(number: String, name: String?) {
+        val clean = number.trim()
+        if (clean.isEmpty()) {
+            val last = uiState.value.callLogs.firstOrNull()?.number.orEmpty()
+            if (last.isNotEmpty()) {
+                dialedDigits.value = last
+                triggerLiveCallerIdLookup(last)
+            }
+            return
+        }
+        routePickerTarget.value = CallerDetailTarget(
+            number = clean,
+            normalizedNumber = normalizePhoneNumber(clean),
             name = name
         )
     }
@@ -828,9 +1007,18 @@ class DialerViewModel(
             ?: resolveContactName(numberToCall, state.contacts)
             ?: state.cloudCallerId.dialedLookup?.displayName
 
-        val effectiveRoute = if (route == CallRoute.SIM_2) CallRoute.SIM_2 else CallRoute.SIM_1
+        val effectiveRoute = when (route) {
+            CallRoute.SIM_2 -> CallRoute.SIM_2
+            CallRoute.ICC_SIP -> CallRoute.ICC_SIP
+            else -> CallRoute.SIM_1
+        }
         val result = when (effectiveRoute) {
             CallRoute.SIM_2 -> telephony.placeSimCall(numberToCall, state.sim2)
+            CallRoute.ICC_SIP -> telephony.placeIccSipCall(
+                rawNumber = numberToCall,
+                server = state.preferences.iccSipServer,
+                username = state.preferences.iccSipUsername
+            )
             else -> telephony.placeSimCall(numberToCall, state.sim1)
         }
 
@@ -950,6 +1138,24 @@ class DialerViewModel(
 
     fun deleteCallNote(normalizedNumber: String) {
         viewModelScope.launch { repository.deleteCallNote(normalizedNumber) }
+    }
+
+    fun deleteSingleCallLogEntry(entryId: String) {
+        hiddenCallLogIds.value = hiddenCallLogIds.value + entryId
+        if (entryId.startsWith("sys_")) {
+            systemSnapshot.value = systemSnapshot.value.copy(
+                systemCallLogs = systemSnapshot.value.systemCallLogs.filterNot { it.id == entryId }
+            )
+        }
+        viewModelScope.launch {
+            if (entryId.startsWith("local_")) {
+                entryId.removePrefix("local_").toLongOrNull()?.let { localId ->
+                    repository.deleteLocalCallRecord(localId)
+                }
+            } else if (entryId.startsWith("sys_")) {
+                telephony.deleteSystemCallLog(entryId.removePrefix("sys_"))
+            }
+        }
     }
 
     fun deleteCallLogItem(item: CallLogItem) {
@@ -1261,6 +1467,8 @@ class DialerViewModel(
         val byFilter = when (filter) {
             CallFilterType.ALL -> logs
             CallFilterType.MISSED -> logs.filter { it.direction == CallDirection.MISSED || it.direction == CallDirection.REJECTED }
+            CallFilterType.SIP_VOIP -> logs.filter { it.route == CallRoute.ICC_SIP }
+            CallFilterType.CELLULAR -> logs.filter { it.route == CallRoute.SIM_1 || it.route == CallRoute.SIM_2 }
             CallFilterType.BRILLIANT -> logs
             CallFilterType.OUTGOING -> logs.filter { it.direction == CallDirection.OUTGOING }
             CallFilterType.INCOMING -> logs.filter { it.direction == CallDirection.INCOMING }
