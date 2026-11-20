@@ -24,6 +24,7 @@ import com.example.data.local.CallNoteEntity
 import com.example.data.local.NovaCallDatabase
 import com.example.data.local.PreferencesRepository
 import com.example.data.local.SpeedDialEntity
+import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.CallDirection
@@ -33,8 +34,11 @@ import com.example.data.model.CallLogItem
 import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.DeviceContact
+import com.example.data.model.DisplayThemeMode
+import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SimCardInfo
+import com.example.data.model.SlideToAnswerMode
 import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
 import com.example.data.telephony.CallNotificationHelper
@@ -66,9 +70,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class NovaTab {
+    FAVORITES,
     RECENTS,
-    KEYPAD,
-    CONTACTS
+    CONTACTS,
+    KEYPAD
 }
 
 data class PermissionSnapshot(
@@ -103,11 +108,13 @@ data class DialerUiState(
     val isDefaultDialer: Boolean = false,
     val dialedDigits: String = "",
     val contactSearchQuery: String = "",
+    val recentsSearchQuery: String = "",
     val recentsFilter: CallFilterType = CallFilterType.ALL,
     val preferences: UserPreferences = UserPreferences(),
     val permissions: PermissionSnapshot = PermissionSnapshot(),
     val simCards: List<SimCardInfo> = emptyList(),
     val contacts: List<DeviceContact> = emptyList(),
+    val favoriteContacts: List<DeviceContact> = emptyList(),
     val callLogs: List<CallLogItem> = emptyList(),
     val speedDials: List<SpeedDialEntity> = emptyList(),
     val blockedNumbers: List<BlockedNumberEntity> = emptyList(),
@@ -158,6 +165,7 @@ private data class UiInputSnapshot(
     val isSettingsOpen: Boolean,
     val dialedDigits: String,
     val contactSearchQuery: String,
+    val recentsSearchQuery: String,
     val recentsFilter: CallFilterType,
     val selectedCallerDetail: CallerDetailTarget?,
     val routePickerTarget: CallerDetailTarget?
@@ -175,6 +183,7 @@ class DialerViewModel(
     private val isSettingsOpen = MutableStateFlow(false)
     private val dialedDigits = MutableStateFlow("")
     private val contactSearchQuery = MutableStateFlow("")
+    private val recentsSearchQuery = MutableStateFlow("")
     private val recentsFilter = MutableStateFlow(CallFilterType.ALL)
     private val selectedCallerDetail = MutableStateFlow<CallerDetailTarget?>(null)
     private val routePickerTarget = MutableStateFlow<CallerDetailTarget?>(null)
@@ -270,11 +279,20 @@ class DialerViewModel(
     private val uiInputFlow = combine(
         combine(activeTab, isSettingsOpen) { t, s -> t to s },
         dialedDigits,
-        contactSearchQuery,
+        combine(contactSearchQuery, recentsSearchQuery) { cq, rq -> cq to rq },
         recentsFilter,
         combine(selectedCallerDetail, routePickerTarget) { d, r -> d to r }
-    ) { nav, digits, query, filter, overlays ->
-        UiInputSnapshot(nav.first, nav.second, digits, query, filter, overlays.first, overlays.second)
+    ) { nav, digits, queries, filter, overlays ->
+        UiInputSnapshot(
+            activeTab = nav.first,
+            isSettingsOpen = nav.second,
+            dialedDigits = digits,
+            contactSearchQuery = queries.first,
+            recentsSearchQuery = queries.second,
+            recentsFilter = filter,
+            selectedCallerDetail = overlays.first,
+            routePickerTarget = overlays.second
+        )
     }
 
     val uiState: StateFlow<DialerUiState> = combine(
@@ -295,7 +313,9 @@ class DialerViewModel(
         val normalizedDial = normalizePhoneNumber(input.dialedDigits)
         val t9Matches = computeT9Matches(input.dialedDigits, sys.contacts)
         val filteredContacts = filterContacts(input.contactSearchQuery, sys.contacts)
-        val filteredLogs = filterCallLogs(input.recentsFilter, mergedLogs)
+        val filteredLogs = filterCallLogs(input.recentsFilter, input.recentsSearchQuery, mergedLogs)
+        val favSet = room.preferences.favoriteNumbers
+        val favorites = buildFavoritesList(sys.contacts, room.speedDials, favSet)
         val matchedNote = if (normalizedDial.length >= 4) {
             room.callNotes.firstOrNull {
                 it.normalizedNumber == normalizedDial ||
@@ -315,11 +335,13 @@ class DialerViewModel(
             isDefaultDialer = sys.isDefaultDialer,
             dialedDigits = input.dialedDigits,
             contactSearchQuery = input.contactSearchQuery,
+            recentsSearchQuery = input.recentsSearchQuery,
             recentsFilter = input.recentsFilter,
             preferences = room.preferences,
             permissions = sys.permissions,
             simCards = sys.simCards,
             contacts = sys.contacts,
+            favoriteContacts = favorites,
             callLogs = mergedLogs,
             speedDials = room.speedDials,
             blockedNumbers = room.blockedNumbers,
@@ -955,6 +977,54 @@ class DialerViewModel(
         repository.updateAutoSpeaker(enabled)
     }
 
+    fun updateRecentsSearch(query: String) {
+        recentsSearchQuery.value = query
+    }
+
+    fun addFavorite(contact: DeviceContact) = viewModelScope.launch {
+        val norm = contact.normalizedNumber.ifBlank { normalizePhoneNumber(contact.phoneNumber) }
+        if (norm.isBlank()) return@launch
+        val updated = uiState.value.preferences.favoriteNumbers + norm
+        repository.updateFavoriteNumbers(updated)
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(if (isBn) "${contact.name} প্রিয় তালিকায় যোগ হয়েছে ★" else "Added ${contact.name} to Favorites ★")
+    }
+
+    fun removeFavorite(contact: DeviceContact) = viewModelScope.launch {
+        val norm = contact.normalizedNumber.ifBlank { normalizePhoneNumber(contact.phoneNumber) }
+        val tail = norm.takeLast(10)
+        val updated = uiState.value.preferences.favoriteNumbers.filterNot {
+            it == norm || (tail.length >= 8 && it.endsWith(tail))
+        }.toSet()
+        repository.updateFavoriteNumbers(updated)
+        // Also remove from local speed dials if matching so unpinning feels instant
+        uiState.value.speedDials
+            .firstOrNull { it.normalizedNumber == norm || (tail.length >= 8 && it.normalizedNumber.endsWith(tail)) }
+            ?.let { repository.removeSpeedDial(it.digit) }
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(if (isBn) "${contact.name} প্রিয় তালিকা থেকে সরানো হয়েছে" else "Removed ${contact.name} from Favorites")
+    }
+
+    fun updateLiquidGlass(enabled: Boolean) = viewModelScope.launch {
+        repository.updateLiquidGlass(enabled)
+    }
+
+    fun updateDisplayThemeMode(mode: DisplayThemeMode) = viewModelScope.launch {
+        repository.updateDisplayThemeMode(mode)
+    }
+
+    fun updateFontScale(scale: AppFontScale) = viewModelScope.launch {
+        repository.updateFontScale(scale)
+    }
+
+    fun updateIncomingCallDisplayStyle(style: IncomingCallDisplayStyle) = viewModelScope.launch {
+        repository.updateIncomingCallDisplayStyle(style)
+    }
+
+    fun updateSlideToAnswerMode(mode: SlideToAnswerMode) = viewModelScope.launch {
+        repository.updateSlideToAnswerMode(mode)
+    }
+
     fun addQuickReply(template: String) = viewModelScope.launch {
         val trimmed = template.trim()
         if (trimmed.isEmpty()) return@launch
@@ -1086,13 +1156,58 @@ class DialerViewModel(
             .take(120)
     }
 
-    private fun filterCallLogs(filter: CallFilterType, logs: List<CallLogItem>): List<CallLogItem> {
-        return when (filter) {
+    private fun buildFavoritesList(
+        contacts: List<DeviceContact>,
+        speedDials: List<SpeedDialEntity>,
+        pinnedNumbers: Set<String>
+    ): List<DeviceContact> {
+        val seen = HashSet<String>()
+        val result = ArrayList<DeviceContact>()
+        for (c in contacts) {
+            val norm = c.normalizedNumber
+            val isPinned = c.isStarred || pinnedNumbers.contains(norm) ||
+                (norm.length >= 8 && pinnedNumbers.any { it.endsWith(norm.takeLast(10)) })
+            if (isPinned && seen.add(norm.takeLast(10).ifEmpty { c.id })) {
+                result.add(c.copy(isStarred = true))
+            }
+        }
+        for (sd in speedDials) {
+            val key = sd.normalizedNumber.takeLast(10).ifEmpty { sd.phoneNumber }
+            if (seen.add(key)) {
+                result.add(
+                    DeviceContact(
+                        id = "sd_${sd.digit}",
+                        name = sd.name,
+                        phoneNumber = sd.phoneNumber,
+                        normalizedNumber = sd.normalizedNumber,
+                        photoUri = null,
+                        isStarred = true
+                    )
+                )
+            }
+        }
+        return result.sortedBy { it.name.lowercase() }
+    }
+
+    private fun filterCallLogs(
+        filter: CallFilterType,
+        query: String,
+        logs: List<CallLogItem>
+    ): List<CallLogItem> {
+        val byFilter = when (filter) {
             CallFilterType.ALL -> logs
             CallFilterType.MISSED -> logs.filter { it.direction == CallDirection.MISSED || it.direction == CallDirection.REJECTED }
-            CallFilterType.BRILLIANT -> logs.filter { it.route == CallRoute.BRILLIANT }
+            CallFilterType.BRILLIANT -> logs
             CallFilterType.OUTGOING -> logs.filter { it.direction == CallDirection.OUTGOING }
             CallFilterType.INCOMING -> logs.filter { it.direction == CallDirection.INCOMING }
+        }
+        val q = query.trim()
+        if (q.isEmpty()) return byFilter
+        val normQ = normalizePhoneNumber(q)
+        return byFilter.filter { item ->
+            (item.contactName?.contains(q, ignoreCase = true) == true) ||
+                item.number.contains(q, ignoreCase = true) ||
+                (normQ.isNotEmpty() && item.normalizedNumber.contains(normQ))
         }
     }
 

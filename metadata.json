@@ -1,6 +1,6 @@
 {
   "name": "Shajamal",
-  "description": "Fast Dual-SIM Phone Dialer (SIM 1 & SIM 2) with animated incoming/outgoing call screens, photo contact saving, T9 smart search, Caller ID, call recording, and spam blocker.",
+  "description": "Liquid Glass Dual-SIM Phone Dialer (SIM 1 & SIM 2) with frosted call screens, Slide to Answer, Favorites, Display Options, A-Z Contacts with voice search, Truecaller-style Caller ID, photo contact saving, and call recording.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

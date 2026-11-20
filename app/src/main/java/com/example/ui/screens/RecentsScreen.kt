@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -20,7 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,22 +35,28 @@ import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RemoveCircle
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.StickyNote2
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -68,6 +78,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.cloud.CallerIdIntelligence
 import com.example.data.model.AppLanguage
 import com.example.data.model.CallDirection
 import com.example.data.model.CallFilterType
@@ -89,12 +100,13 @@ fun RecentsScreen(
     state: DialerUiState,
     strings: NovaStrings,
     onSelectFilter: (CallFilterType) -> Unit,
+    onSearchChange: (String) -> Unit,
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenKeypad: () -> Unit,
     onRequestPermissions: () -> Unit,
     onCallRoute: (String, CallRoute, String?) -> Unit,
     onOpenCallerDetail: (String, String?) -> Unit,
+    onOpenTagCaller: (String, String?) -> Unit,
     onWhatsApp: (String) -> Unit,
     onOpenNoteDialog: (String, String?) -> Unit,
     onDeleteCallLog: (CallLogItem) -> Unit,
@@ -105,12 +117,30 @@ fun RecentsScreen(
     val haptic = LocalHapticFeedback.current
     val isBn = state.preferences.language == AppLanguage.BENGALI
     var expandedId by remember { mutableStateOf<String?>(null) }
+    var editMode by remember { mutableStateOf(false) }
+    var showFilterMenu by remember { mutableStateOf(false) }
+
+    val voiceSearchLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spoken.isNullOrBlank()) {
+                onSearchChange(spoken)
+            }
+        }
+    }
 
     val blockedSet = remember(state.blockedNumbers) {
         state.blockedNumbers.map { it.normalizedNumber }.toSet()
     }
     val notesMap = remember(state.callNotes) {
         state.callNotes.associateBy { it.normalizedNumber }
+    }
+    val savedNumbersSet = remember(state.contacts) {
+        state.contacts.map { it.normalizedNumber.takeLast(10) }.toSet()
     }
 
     Box(
@@ -123,95 +153,267 @@ fun RecentsScreen(
                 .widthIn(max = 640.dp)
                 .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
-            // Header
+            // Top Bar matching Liquid Glass Recents: Edit | [All | Missed] | Filter + Settings
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = strings.tabRecents,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onBackground
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable { editMode = !editMode }
+                        .testTag("recents_edit_button"),
+                    shape = RoundedCornerShape(50),
+                    color = if (editMode) MaterialTheme.colorScheme.primaryContainer else nova.glassSurface,
+                    border = BorderStroke(
+                        1.dp,
+                        if (editMode) MaterialTheme.colorScheme.primary else nova.glassBorder.copy(alpha = 0.75f)
                     )
+                ) {
                     Text(
-                        text = "${strings.todayCalls}: ${state.todayCallCount}  •  ${strings.totalBlocked}: ${state.blockedNumbers.size}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = if (editMode) {
+                            if (isBn) "সম্পন্ন" else "Done"
+                        } else {
+                            if (isBn) "এডিট" else "Edit"
+                        },
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (editMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                     )
                 }
+
+                // Segmented Liquid Glass Pill: All | Missed
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = nova.glassSurface.copy(alpha = if (nova.liquidGlassEnabled) 0.85f else 1f),
+                    border = BorderStroke(1.dp, nova.glassBorder.copy(alpha = 0.75f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val isAll = state.recentsFilter == CallFilterType.ALL
+                        val isMissed = state.recentsFilter == CallFilterType.MISSED
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (isAll) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                                .clickable { onSelectFilter(CallFilterType.ALL) }
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                .testTag("recents_filter_all"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.filterAll,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (isAll) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (isAll) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (isMissed) nova.missedContainer else Color.Transparent)
+                                .clickable { onSelectFilter(CallFilterType.MISSED) }
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                                .testTag("recents_filter_missed"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.filterMissed,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (isMissed) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (isMissed) nova.missed else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    IconButton(
-                        onClick = onRefresh,
-                        modifier = Modifier.testTag("refresh_recents_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh",
-                            tint = nova.gold
-                        )
+                    Box {
+                        Surface(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable { showFilterMenu = true }
+                                .testTag("recents_filter_menu_button"),
+                            shape = CircleShape,
+                            color = nova.glassSurface,
+                            border = BorderStroke(1.dp, nova.glassBorder.copy(alpha = 0.75f))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.FilterList,
+                                    contentDescription = if (isBn) "ফিল্টার" else "Filter",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = showFilterMenu,
+                            onDismissRequest = { showFilterMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(strings.filterAll) },
+                                onClick = {
+                                    onSelectFilter(CallFilterType.ALL)
+                                    showFilterMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(strings.filterMissed) },
+                                onClick = {
+                                    onSelectFilter(CallFilterType.MISSED)
+                                    showFilterMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(strings.filterOutgoing) },
+                                onClick = {
+                                    onSelectFilter(CallFilterType.OUTGOING)
+                                    showFilterMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(strings.filterIncoming) },
+                                onClick = {
+                                    onSelectFilter(CallFilterType.INCOMING)
+                                    showFilterMenu = false
+                                }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text(if (isBn) "রিফ্রেশ করুন" else "Refresh") },
+                                leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                                onClick = {
+                                    onRefresh()
+                                    showFilterMenu = false
+                                }
+                            )
+                        }
                     }
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier.testTag("recents_settings_button")
+
+                    Surface(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onOpenSettings)
+                            .testTag("recents_settings_button"),
+                        shape = CircleShape,
+                        color = nova.glassSurface,
+                        border = BorderStroke(1.dp, nova.glassBorder.copy(alpha = 0.75f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = if (isBn) "সেটিংস" else "Settings",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = if (isBn) "সেটিংস" else "Settings",
+                                tint = nova.gold,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Filter Pills
-            val filters = remember(strings) {
-                listOf(
-                    CallFilterType.ALL to strings.filterAll,
-                    CallFilterType.MISSED to strings.filterMissed,
-                    CallFilterType.OUTGOING to strings.filterOutgoing,
-                    CallFilterType.INCOMING to strings.filterIncoming
-                )
-            }
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 2.dp)
-            ) {
-                items(filters) { (filter, label) ->
-                    val selected = state.recentsFilter == filter
-                    FilterChip(
-                        selected = selected,
-                        onClick = { onSelectFilter(filter) },
-                        modifier = Modifier.testTag("recents_filter_${filter.name.lowercase()}"),
-                        label = {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelMedium
+            // Rounded Pill Search Bar with Voice Mic (matching Screenshot 8)
+            OutlinedTextField(
+                value = state.recentsSearchQuery,
+                onValueChange = onSearchChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("recents_search_input"),
+                placeholder = {
+                    Text(
+                        text = if (isBn) "নাম বা নম্বর খুঁজুন..." else "Search recents...",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingIcon = {
+                    if (state.recentsSearchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchChange("") }) {
+                            Icon(Icons.Filled.Close, contentDescription = strings.clearAll)
+                        }
+                    } else {
+                        IconButton(
+                            onClick = {
+                                runCatching {
+                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(
+                                            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                                        )
+                                    }
+                                    voiceSearchLauncher.launch(intent)
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Mic,
+                                contentDescription = if (isBn) "ভয়েস সার্চ" else "Voice Search",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(50),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = nova.glassSurface,
+                    unfocusedContainerColor = nova.glassSurface,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = nova.glassBorder.copy(alpha = 0.65f)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Truecaller-style Caller ID Status Strip + Gesture Tip
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.VerifiedUser,
+                        contentDescription = null,
+                        tint = Color(0xFF0087FF),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = if (isBn) "Truecaller আইডি সক্রিয় • আজকের কল: ${state.todayCallCount}"
+                        else "Caller ID Active • Today: ${state.todayCallCount}",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Text(
+                    text = if (isBn) "ডানে কল • বামে ডিলিট" else "Swipe → Call • ← Del",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+                )
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = if (isBn) "ডানে টানলে কল • বামে টানলে ডিলিট • চেপে ধরলে কল অপশন"
-                else "Swipe right to call • Swipe left to delete • Long press for options",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
-            )
 
             Spacer(modifier = Modifier.height(6.dp))
 
@@ -265,8 +467,8 @@ fun RecentsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 86.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp)
                 ) {
                     items(
                         items = state.filteredCallLogs,
@@ -275,12 +477,20 @@ fun RecentsScreen(
                     ) { item ->
                         val isBlocked = blockedSet.contains(item.normalizedNumber)
                         val note = notesMap[item.normalizedNumber]
+                        val isSavedContact = savedNumbersSet.contains(item.normalizedNumber.takeLast(10))
+                        val truecallerInfo = remember(item.number, isSavedContact) {
+                            if (!isSavedContact) CallerIdIntelligence.detectOffline(item.number) else null
+                        }
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { targetValue ->
                                 when (targetValue) {
                                     SwipeToDismissBoxValue.StartToEnd -> {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onCallRoute(item.number, item.route, item.contactName)
+                                        onCallRoute(
+                                            item.number,
+                                            if (item.route == CallRoute.SIM_2) CallRoute.SIM_2 else CallRoute.SIM_1,
+                                            item.contactName
+                                        )
                                         false
                                     }
                                     SwipeToDismissBoxValue.EndToStart -> {
@@ -294,7 +504,7 @@ fun RecentsScreen(
                         )
                         SwipeToDismissBox(
                             state = dismissState,
-                            enableDismissFromStartToEnd = true,
+                            enableDismissFromStartToEnd = !editMode,
                             enableDismissFromEndToStart = true,
                             backgroundContent = {
                                 val direction = dismissState.dismissDirection
@@ -356,7 +566,10 @@ fun RecentsScreen(
                             CallLogCard(
                                 item = item,
                                 expanded = expandedId == item.id,
+                                editMode = editMode,
                                 isBlocked = isBlocked,
+                                isUnknownCaller = !isSavedContact,
+                                callerCarrierHint = truecallerInfo?.carrierOrRegion,
                                 noteText = note?.note,
                                 sim1Label = state.sim1.displayName,
                                 sim2Label = state.sim2.displayName,
@@ -365,6 +578,7 @@ fun RecentsScreen(
                                 onToggleExpand = {
                                     expandedId = if (expandedId == item.id) null else item.id
                                 },
+                                onDeleteClick = { onDeleteCallLog(item) },
                                 onLongPress = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onLongPressCallOptions(item)
@@ -374,29 +588,13 @@ fun RecentsScreen(
                                 },
                                 onWhatsApp = { onWhatsApp(item.number) },
                                 onAddNote = { onOpenNoteDialog(item.number, item.contactName) },
+                                onTagCaller = { onOpenTagCaller(item.number, item.contactName) },
                                 onOpenDetail = { onOpenCallerDetail(item.number, item.contactName) }
                             )
                         }
                     }
                 }
             }
-        }
-
-        FloatingActionButton(
-            onClick = onOpenKeypad,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 18.dp, bottom = 18.dp)
-                .testTag("recents_dialpad_fab"),
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Dialpad,
-                contentDescription = strings.tabKeypad,
-                modifier = Modifier.size(24.dp)
-            )
         }
     }
 }
@@ -406,20 +604,26 @@ fun RecentsScreen(
 private fun CallLogCard(
     item: CallLogItem,
     expanded: Boolean,
+    editMode: Boolean,
     isBlocked: Boolean,
+    isUnknownCaller: Boolean,
+    callerCarrierHint: String?,
     noteText: String?,
     sim1Label: String,
     sim2Label: String,
     strings: NovaStrings,
     language: AppLanguage,
     onToggleExpand: () -> Unit,
+    onDeleteClick: () -> Unit,
     onLongPress: () -> Unit,
     onCallRoute: (CallRoute) -> Unit,
     onWhatsApp: () -> Unit,
     onAddNote: () -> Unit,
+    onTagCaller: () -> Unit,
     onOpenDetail: () -> Unit
 ) {
     val nova = LocalNovaColors.current
+    val isBn = language == AppLanguage.BENGALI
     val (dirIcon, dirColor, dirText) = when (item.direction) {
         CallDirection.INCOMING -> Triple(Icons.AutoMirrored.Filled.CallReceived, nova.sim1, strings.incoming)
         CallDirection.OUTGOING -> Triple(Icons.AutoMirrored.Filled.CallMade, nova.sim2, strings.outgoing)
@@ -440,21 +644,38 @@ private fun CallLogCard(
             )
             .testTag("call_log_card_${item.id}"),
         shape = RoundedCornerShape(20.dp),
-        color = nova.glassSurface,
+        color = nova.glassSurface.copy(alpha = if (nova.liquidGlassEnabled) 0.90f else 1f),
         border = BorderStroke(
             width = 1.dp,
             color = when {
                 isBlocked -> nova.missed.copy(alpha = 0.55f)
                 expanded -> nova.gold.copy(alpha = 0.5f)
-                else -> nova.glassBorder.copy(alpha = 0.7f)
+                else -> nova.glassBorder.copy(alpha = 0.65f)
             }
         )
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                AnimatedVisibility(visible = editMode) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.RemoveCircle,
+                                contentDescription = strings.delete,
+                                tint = nova.missed,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                }
+
                 ContactAvatar(
                     name = item.contactName ?: item.number,
                     photoUri = item.photoUri,
@@ -465,16 +686,24 @@ private fun CallLogCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Text(
                             text = title,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = if (item.direction == CallDirection.MISSED) nova.missed else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
+                        if (isUnknownCaller && !item.contactName.isNullOrBlank()) {
+                            Icon(
+                                imageVector = Icons.Filled.VerifiedUser,
+                                contentDescription = "Truecaller ID",
+                                tint = Color(0xFF0087FF),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                         if (isBlocked) {
                             Icon(
                                 imageVector = Icons.Filled.Block,
@@ -484,25 +713,31 @@ private fun CallLogCard(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Icon(
                             imageVector = dirIcon,
                             contentDescription = dirText,
                             tint = dirColor,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                         val dur = formatCallDuration(item.durationSeconds, language)
                         val timeStr = formatRelativeTime(item.timestamp, language)
+                        val subtitleParts = buildList {
+                            add(timeStr)
+                            if (dur.isNotEmpty()) add(dur)
+                            else if (!callerCarrierHint.isNullOrBlank()) add(callerCarrierHint)
+                        }
                         Text(
-                            text = listOf(timeStr, dur).filter { it.isNotEmpty() }.joinToString(" • "),
+                            text = subtitleParts.joinToString(" • "),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                         RouteBadge(
                             route = item.route,
@@ -511,7 +746,7 @@ private fun CallLogCard(
                         )
                     }
                     if (!noteText.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             text = "${strings.callerNotePrefix}: $noteText",
                             style = MaterialTheme.typography.labelSmall,
@@ -521,13 +756,14 @@ private fun CallLogCard(
                         )
                     }
                 }
-                // Quick Direct Call button using SIM 1 or SIM 2
+                Spacer(modifier = Modifier.width(6.dp))
+                // One-tap Call circle (matching Screenshot 8)
                 val safeRoute = if (item.route == CallRoute.SIM_2) CallRoute.SIM_2 else CallRoute.SIM_1
                 val quickBg = if (safeRoute == CallRoute.SIM_2) nova.sim2Container else nova.sim1Container
                 val quickTint = if (safeRoute == CallRoute.SIM_2) nova.sim2 else nova.sim1
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(42.dp)
                         .clip(CircleShape)
                         .background(quickBg)
                         .clickable { onCallRoute(safeRoute) },
@@ -537,16 +773,16 @@ private fun CallLogCard(
                         imageVector = Icons.Filled.Call,
                         contentDescription = strings.call,
                         tint = quickTint,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
 
             AnimatedVisibility(visible = expanded) {
                 Column {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = nova.glassBorder.copy(alpha = 0.55f))
                     Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = nova.glassBorder.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -569,15 +805,24 @@ private fun CallLogCard(
                             tint = nova.whatsApp,
                             onClick = onWhatsApp
                         )
-                        ExpandedActionPill(
-                            icon = Icons.Filled.StickyNote2,
-                            label = strings.callerNotePrefix,
-                            tint = nova.gold,
-                            onClick = onAddNote
-                        )
+                        if (isUnknownCaller) {
+                            ExpandedActionPill(
+                                icon = Icons.Filled.VerifiedUser,
+                                label = if (isBn) "নাম দিন" else "ID Tag",
+                                tint = Color(0xFF0087FF),
+                                onClick = onTagCaller
+                            )
+                        } else {
+                            ExpandedActionPill(
+                                icon = Icons.Filled.StickyNote2,
+                                label = strings.callerNotePrefix,
+                                tint = nova.gold,
+                                onClick = onAddNote
+                            )
+                        }
                         ExpandedActionPill(
                             icon = Icons.Filled.Info,
-                            label = "More",
+                            label = if (isBn) "বিস্তারিত" else "Info",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             onClick = onOpenDetail
                         )

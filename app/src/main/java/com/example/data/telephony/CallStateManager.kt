@@ -1,5 +1,6 @@
 package com.example.data.telephony
 
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.media.AudioDeviceInfo
@@ -18,6 +19,7 @@ import com.example.data.cloud.CallerIdSource
 import com.google.firebase.FirebaseApp
 import com.example.data.local.NovaCallDatabase
 import com.example.data.local.PreferencesRepository
+import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.normalizePhoneNumber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -104,7 +106,6 @@ object CallStateManager {
         val rawNumber = call.details?.handle?.schemeSpecificPart.orEmpty()
         val lineLabel = call.details?.accountHandle?.id?.let { id ->
             when {
-                id.contains("brilliant", ignoreCase = true) -> "Brilliant VoIP"
                 id.endsWith("2") -> "SIM 2"
                 else -> "SIM 1"
             }
@@ -196,13 +197,20 @@ object CallStateManager {
                 )
                 _activeCall.value = updated
 
-                if (isIncoming && (prefs?.notifyIncomingCalls ?: true)) {
-                    CallNotificationHelper.showIncomingCallNotification(
-                        context = context,
-                        callerName = updated.displayName,
-                        callerNumber = updated.number,
-                        lineLabel = updated.lineLabel
-                    )
+                if (isIncoming) {
+                    val isLocked = (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isKeyguardLocked == true
+                    val preferFullScreen = isLocked || (prefs?.incomingCallDisplayStyle != IncomingCallDisplayStyle.BANNER)
+                    if (prefs?.notifyIncomingCalls ?: true) {
+                        CallNotificationHelper.showIncomingCallNotification(
+                            context = context,
+                            callerName = updated.displayName,
+                            callerNumber = updated.number,
+                            lineLabel = updated.lineLabel
+                        )
+                    }
+                    if (preferFullScreen) {
+                        launchInCallUi(context)
+                    }
                 } else if (!isIncoming && (prefs?.notifyOngoingCalls ?: true)) {
                     val statusText = when (updated.phase) {
                         ActiveCallPhase.ACTIVE -> "Active Call • ${updated.lineLabel}"
@@ -224,7 +232,9 @@ object CallStateManager {
             }
         }
 
-        launchInCallUi(context)
+        if (!isIncoming) {
+            launchInCallUi(context)
+        }
     }
 
     fun onCallRemoved(context: Context, call: Call) {

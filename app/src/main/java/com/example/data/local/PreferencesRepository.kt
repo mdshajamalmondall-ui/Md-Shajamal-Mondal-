@@ -8,12 +8,16 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.BrilliantBridgeStatus
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.DefaultRoutePreference
+import com.example.data.model.DisplayThemeMode
+import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
+import com.example.data.model.SlideToAnswerMode
 import com.example.data.model.UserPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -49,6 +53,12 @@ class PreferencesRepository(private val context: Context) {
         val AUTO_REJECT_BLOCKED = booleanPreferencesKey("auto_reject_blocked")
         val AUTO_SPEAKER = booleanPreferencesKey("auto_speaker")
         val QUICK_REPLIES = stringPreferencesKey("quick_replies_v1")
+        val LIQUID_GLASS = booleanPreferencesKey("liquid_glass_enabled")
+        val DISPLAY_THEME_MODE = stringPreferencesKey("display_theme_mode")
+        val FONT_SCALE = stringPreferencesKey("font_scale")
+        val INCOMING_CALL_STYLE = stringPreferencesKey("incoming_call_style")
+        val SLIDE_TO_ANSWER = stringPreferencesKey("slide_to_answer_mode")
+        val FAVORITE_NUMBERS = stringPreferencesKey("favorite_numbers_v1")
     }
 
     val preferencesFlow: Flow<UserPreferences> = context.novaDataStore.data.map { prefs ->
@@ -102,7 +112,26 @@ class PreferencesRepository(private val context: Context) {
             vibrateOnRing = prefs[Keys.VIBRATE_ON_RING] ?: true,
             autoRejectBlocked = prefs[Keys.AUTO_REJECT_BLOCKED] ?: true,
             autoSpeakerOnCall = prefs[Keys.AUTO_SPEAKER] ?: false,
-            quickReplies = replies
+            quickReplies = replies,
+            liquidGlassEnabled = prefs[Keys.LIQUID_GLASS] ?: true,
+            displayThemeMode = prefs[Keys.DISPLAY_THEME_MODE]
+                ?.let { runCatching { DisplayThemeMode.valueOf(it) }.getOrNull() }
+                ?: if (prefs[Keys.DARK_THEME] == false) DisplayThemeMode.LIGHT else DisplayThemeMode.DARK,
+            fontScale = prefs[Keys.FONT_SCALE]
+                ?.let { runCatching { AppFontScale.valueOf(it) }.getOrNull() }
+                ?: AppFontScale.MEDIUM,
+            incomingCallDisplayStyle = prefs[Keys.INCOMING_CALL_STYLE]
+                ?.let { runCatching { IncomingCallDisplayStyle.valueOf(it) }.getOrNull() }
+                ?: IncomingCallDisplayStyle.FULL_SCREEN,
+            slideToAnswerMode = prefs[Keys.SLIDE_TO_ANSWER]
+                ?.let { runCatching { SlideToAnswerMode.valueOf(it) }.getOrNull() }
+                ?: SlideToAnswerMode.LOCKED_ONLY,
+            favoriteNumbers = prefs[Keys.FAVORITE_NUMBERS]
+                ?.split("\n")
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.toSet()
+                ?: emptySet()
         )
     }
 
@@ -171,6 +200,7 @@ class PreferencesRepository(private val context: Context) {
     suspend fun updateDarkTheme(enabled: Boolean) {
         context.novaDataStore.edit {
             it[Keys.DARK_THEME] = enabled
+            it[Keys.DISPLAY_THEME_MODE] = if (enabled) DisplayThemeMode.DARK.name else DisplayThemeMode.LIGHT.name
             it[Keys.THEME_PALETTE] = if (enabled) AppThemePalette.ROYAL_SAPPHIRE.name else AppThemePalette.PEARL_WHITE.name
         }
     }
@@ -178,7 +208,50 @@ class PreferencesRepository(private val context: Context) {
     suspend fun updateThemePalette(palette: AppThemePalette) {
         context.novaDataStore.edit {
             it[Keys.THEME_PALETTE] = palette.name
-            it[Keys.DARK_THEME] = palette != AppThemePalette.PEARL_WHITE
+            val isDark = palette != AppThemePalette.PEARL_WHITE
+            it[Keys.DARK_THEME] = isDark
+            it[Keys.DISPLAY_THEME_MODE] = if (isDark) DisplayThemeMode.DARK.name else DisplayThemeMode.LIGHT.name
+        }
+    }
+
+    suspend fun updateLiquidGlass(enabled: Boolean) {
+        context.novaDataStore.edit { it[Keys.LIQUID_GLASS] = enabled }
+    }
+
+    suspend fun updateDisplayThemeMode(mode: DisplayThemeMode) {
+        context.novaDataStore.edit {
+            it[Keys.DISPLAY_THEME_MODE] = mode.name
+            when (mode) {
+                DisplayThemeMode.LIGHT -> {
+                    it[Keys.DARK_THEME] = false
+                    it[Keys.THEME_PALETTE] = AppThemePalette.PEARL_WHITE.name
+                }
+                DisplayThemeMode.DARK -> {
+                    it[Keys.DARK_THEME] = true
+                    if (it[Keys.THEME_PALETTE] == AppThemePalette.PEARL_WHITE.name) {
+                        it[Keys.THEME_PALETTE] = AppThemePalette.ROYAL_SAPPHIRE.name
+                    }
+                }
+                DisplayThemeMode.SYSTEM -> Unit
+            }
+        }
+    }
+
+    suspend fun updateFontScale(scale: AppFontScale) {
+        context.novaDataStore.edit { it[Keys.FONT_SCALE] = scale.name }
+    }
+
+    suspend fun updateIncomingCallDisplayStyle(style: IncomingCallDisplayStyle) {
+        context.novaDataStore.edit { it[Keys.INCOMING_CALL_STYLE] = style.name }
+    }
+
+    suspend fun updateSlideToAnswerMode(mode: SlideToAnswerMode) {
+        context.novaDataStore.edit { it[Keys.SLIDE_TO_ANSWER] = mode.name }
+    }
+
+    suspend fun updateFavoriteNumbers(numbers: Set<String>) {
+        context.novaDataStore.edit {
+            it[Keys.FAVORITE_NUMBERS] = numbers.filter { n -> n.isNotBlank() }.joinToString("\n")
         }
     }
 

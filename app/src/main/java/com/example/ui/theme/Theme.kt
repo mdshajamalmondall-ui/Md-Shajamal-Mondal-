@@ -1,6 +1,7 @@
 package com.example.ui.theme
 
 import android.app.Activity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -11,9 +12,13 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
+import com.example.data.model.AppFontScale
 import com.example.data.model.AppThemePalette
+import com.example.data.model.DisplayThemeMode
 
 @Immutable
 data class NovaExtendedColors(
@@ -31,7 +36,8 @@ data class NovaExtendedColors(
     val whatsApp: Color,
     val glassSurface: Color,
     val glassBorder: Color,
-    val isDark: Boolean
+    val isDark: Boolean,
+    val liquidGlassEnabled: Boolean = true
 )
 
 private fun buildDarkExtended(surfaceElevated: Color, outline: Color, goldAccent: Color = ChampagneGold): NovaExtendedColors =
@@ -209,10 +215,22 @@ private val LightColorScheme = lightColorScheme(
 fun NovaCallTheme(
     darkTheme: Boolean = true,
     themePalette: AppThemePalette? = null,
+    displayThemeMode: DisplayThemeMode = DisplayThemeMode.DARK,
+    fontScale: AppFontScale = AppFontScale.MEDIUM,
+    liquidGlassEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val resolvedPalette = themePalette
-        ?: if (darkTheme) AppThemePalette.ROYAL_SAPPHIRE else AppThemePalette.PEARL_WHITE
+    val systemDark = isSystemInDarkTheme()
+    val effectiveDark = when (displayThemeMode) {
+        DisplayThemeMode.SYSTEM -> systemDark
+        DisplayThemeMode.LIGHT -> false
+        DisplayThemeMode.DARK -> true
+    }
+    val resolvedPalette = when {
+        !effectiveDark -> AppThemePalette.PEARL_WHITE
+        themePalette != null && themePalette != AppThemePalette.PEARL_WHITE -> themePalette
+        else -> AppThemePalette.ROYAL_SAPPHIRE
+    }
     val isDark = resolvedPalette != AppThemePalette.PEARL_WHITE
 
     val colorScheme = when (resolvedPalette) {
@@ -230,7 +248,7 @@ fun NovaCallTheme(
         AppThemePalette.OCEAN_TEAL -> OceanExtendedColors
         AppThemePalette.CRIMSON_VELVET -> CrimsonExtendedColors
         AppThemePalette.PEARL_WHITE -> LightExtendedColors
-    }
+    }.copy(liquidGlassEnabled = liquidGlassEnabled)
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -245,7 +263,16 @@ fun NovaCallTheme(
         }
     }
 
-    CompositionLocalProvider(LocalNovaColors provides extendedColors) {
+    val currentDensity = LocalDensity.current
+    val scaledDensity = Density(
+        density = currentDensity.density,
+        fontScale = (currentDensity.fontScale * fontScale.multiplier).coerceIn(0.8f, 1.55f)
+    )
+
+    CompositionLocalProvider(
+        LocalNovaColors provides extendedColors,
+        LocalDensity provides scaledDensity
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = NovaTypography,

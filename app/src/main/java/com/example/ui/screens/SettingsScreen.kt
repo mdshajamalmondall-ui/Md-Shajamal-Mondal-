@@ -74,10 +74,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.DefaultRoutePreference
+import com.example.data.model.DisplayThemeMode
+import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
+import com.example.data.model.SlideToAnswerMode
 import com.example.data.telephony.CallRecorderManager
 import com.example.ui.components.ThemePalettePicker
 import com.example.ui.i18n.NovaStrings
@@ -117,6 +121,11 @@ fun SettingsScreen(
     onRemoveQuickReply: (String) -> Unit,
     onToggleDarkTheme: (Boolean) -> Unit,
     onSelectThemePalette: (AppThemePalette) -> Unit,
+    onToggleLiquidGlass: (Boolean) -> Unit,
+    onSelectDisplayThemeMode: (DisplayThemeMode) -> Unit,
+    onSelectFontScale: (AppFontScale) -> Unit,
+    onSelectIncomingCallStyle: (IncomingCallDisplayStyle) -> Unit,
+    onSelectSlideToAnswerMode: (SlideToAnswerMode) -> Unit,
     onToggleLanguage: (AppLanguage) -> Unit,
     signedInEmail: String?,
     onToggleCloudCallerId: (Boolean) -> Unit,
@@ -306,13 +315,210 @@ fun SettingsScreen(
                     }
                 }
 
+                // 1A. Display Options (Liquid Glass, Display Theme, Font Size, Incoming Calls, Slide to Answer)
+                item {
+                    SettingsSectionCard(
+                        title = if (isBn) "ডিসপ্লে অপশন (Liquid Glass)" else "Display Options",
+                        icon = Icons.Filled.Tune,
+                        iconTint = nova.gold
+                    ) {
+                        SettingsSwitchRow(
+                            title = if (isBn) "Liquid Glass ইফেক্ট" else "Liquid Glass",
+                            subtitle = if (isBn) {
+                                "কল স্ক্রিন ও বাটনে স্বচ্ছ গ্লাস ব্লার ইফেক্ট চালু রাখবে (কম র‍্যামের ফোনে বন্ধ রাখতে পারেন)।"
+                            } else {
+                                "Enable glass blur effect on call screen & controls; may impact performance on low-end devices."
+                            },
+                            checked = state.preferences.liquidGlassEnabled,
+                            onCheckedChange = onToggleLiquidGlass,
+                            tag = "switch_liquid_glass"
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = nova.glassBorder.copy(alpha = 0.5f)
+                        )
+
+                        // Display Theme (System / Light / Dark)
+                        Text(
+                            text = if (isBn) "ডিসপ্লে থিম (Display Theme)" else "Display Theme",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isBn) {
+                                "লাইট, ডার্ক অথবা ফোনের সিস্টেম অনুযায়ী অটো থিম বেছে নিন।"
+                            } else {
+                                "Choose Light, Dark, or System mode that adapts automatically to your device."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val themeModes = listOf(
+                            DisplayThemeMode.SYSTEM to (if (isBn) "সিস্টেম" else "System"),
+                            DisplayThemeMode.LIGHT to (if (isBn) "লাইট" else "Light"),
+                            DisplayThemeMode.DARK to (if (isBn) "ডার্ক" else "Dark")
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            themeModes.forEach { (mode, label) ->
+                                FilterChip(
+                                    selected = state.preferences.displayThemeMode == mode,
+                                    onClick = { onSelectDisplayThemeMode(mode) },
+                                    modifier = Modifier.testTag("display_theme_${mode.name.lowercase()}"),
+                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = nova.sim1Container,
+                                        selectedLabelColor = nova.sim1
+                                    )
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = nova.glassBorder.copy(alpha = 0.5f)
+                        )
+
+                        // Font Size (Small / Medium / Large)
+                        Text(
+                            text = if (isBn) "ফন্ট সাইজ (Font Size)" else "Font Size",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isBn) {
+                                "অ্যাপের লেখাগুলো পড়তে আরও আরামদায়ক করতে সাইজ ঠিক করুন।"
+                            } else {
+                                "Adjust the text size throughout the app to make it more comfortable for reading."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val fontSizes = listOf(
+                            AppFontScale.SMALL to (if (isBn) "ছোট" else "Small"),
+                            AppFontScale.MEDIUM to (if (isBn) "মাঝারি" else "Medium"),
+                            AppFontScale.LARGE to (if (isBn) "বড়" else "Large")
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            fontSizes.forEach { (scale, label) ->
+                                FilterChip(
+                                    selected = state.preferences.fontScale == scale,
+                                    onClick = { onSelectFontScale(scale) },
+                                    modifier = Modifier.testTag("font_scale_${scale.name.lowercase()}"),
+                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = nova.goldContainer,
+                                        selectedLabelColor = nova.gold
+                                    )
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = nova.glassBorder.copy(alpha = 0.5f)
+                        )
+
+                        // Incoming Calls Style (Full Screen / Banner)
+                        Text(
+                            text = if (isBn) "ইনকামিং কল স্টাইল (Incoming Calls)" else "Incoming Calls",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isBn) {
+                                "ফোন আনলক থাকা অবস্থায় অন্য অ্যাপ চালানোর সময় ইনকামিং কল কীভাবে দেখাবে তা নির্ধারণ করুন।"
+                            } else {
+                                "Control how incoming calls appear while you are using other apps and the phone is unlocked."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val incomingStyles = listOf(
+                            IncomingCallDisplayStyle.FULL_SCREEN to (if (isBn) "ফুল স্ক্রিন" else "Full Screen"),
+                            IncomingCallDisplayStyle.BANNER to (if (isBn) "ব্যানার" else "Banner")
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            incomingStyles.forEach { (style, label) ->
+                                FilterChip(
+                                    selected = state.preferences.incomingCallDisplayStyle == style,
+                                    onClick = { onSelectIncomingCallStyle(style) },
+                                    modifier = Modifier.testTag("incoming_style_${style.name.lowercase()}"),
+                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = nova.sim1Container,
+                                        selectedLabelColor = nova.sim1
+                                    )
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = nova.glassBorder.copy(alpha = 0.5f)
+                        )
+
+                        // Slide to Answer (Show only when locked / Always / Never)
+                        Text(
+                            text = if (isBn) "স্লাইড করে রিসিভ (Slide to Answer)" else "Slide to Answer",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isBn) {
+                                "ফোন লক থাকলে পকেটে ভুল করে কল রিসিভ হওয়া আটকাতে স্লাইড বার ব্যবহার করুন।"
+                            } else {
+                                "Use a horizontal Slide to Answer bar when the phone is locked or always."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val slideModes = listOf(
+                            SlideToAnswerMode.LOCKED_ONLY to (if (isBn) "শুধু লক থাকলে" else "Only when locked"),
+                            SlideToAnswerMode.ALWAYS to (if (isBn) "সবসময়" else "Always"),
+                            SlideToAnswerMode.NEVER to (if (isBn) "কখনো নয়" else "Never")
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            slideModes.forEach { (mode, label) ->
+                                FilterChip(
+                                    selected = state.preferences.slideToAnswerMode == mode,
+                                    onClick = { onSelectSlideToAnswerMode(mode) },
+                                    modifier = Modifier.testTag("slide_mode_${mode.name.lowercase()}"),
+                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = nova.goldContainer,
+                                        selectedLabelColor = nova.gold
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // 1B. Truecaller-Style Community Caller ID & Google Account
                 item {
                     val cloudProfile = state.cloudCallerId.profile
+                    val truecallerBlue = Color(0xFF0087FF)
                     SettingsSectionCard(
-                        title = if (isBn) "কমিউনিটি কলার আইডি (Truecaller মোড)" else "Community Caller ID",
+                        title = if (isBn) "Truecaller কলার আইডি • কে কল করছে জানুন" else "Truecaller Caller ID • Know Who's Calling",
                         icon = Icons.Filled.VerifiedUser,
-                        iconTint = nova.sim1
+                        iconTint = truecallerBlue
                     ) {
                         SettingsSwitchRow(
                             title = if (isBn) "অচেনা নম্বরের নাম অটো-খুঁজুন" else "Live Unknown Caller ID",
@@ -337,7 +543,7 @@ fun SettingsScreen(
                                     .testTag("sync_community_contacts_button"),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = nova.sim1,
+                                    containerColor = truecallerBlue,
                                     contentColor = Color.White
                                 )
                             ) {

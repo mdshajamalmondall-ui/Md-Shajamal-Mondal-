@@ -58,6 +58,29 @@ enum class AppThemePalette {
     PEARL_WHITE
 }
 
+enum class DisplayThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
+enum class AppFontScale(val multiplier: Float) {
+    SMALL(0.90f),
+    MEDIUM(1.0f),
+    LARGE(1.13f)
+}
+
+enum class IncomingCallDisplayStyle {
+    FULL_SCREEN,
+    BANNER
+}
+
+enum class SlideToAnswerMode {
+    LOCKED_ONLY,
+    ALWAYS,
+    NEVER
+}
+
 data class CallingAccountOption(
     val id: String,
     val label: String,
@@ -140,7 +163,13 @@ data class UserPreferences(
     val vibrateOnRing: Boolean = true,
     val autoRejectBlocked: Boolean = true,
     val autoSpeakerOnCall: Boolean = false,
-    val quickReplies: List<String> = DEFAULT_QUICK_REPLIES
+    val quickReplies: List<String> = DEFAULT_QUICK_REPLIES,
+    val liquidGlassEnabled: Boolean = true,
+    val displayThemeMode: DisplayThemeMode = DisplayThemeMode.DARK,
+    val fontScale: AppFontScale = AppFontScale.MEDIUM,
+    val incomingCallDisplayStyle: IncomingCallDisplayStyle = IncomingCallDisplayStyle.FULL_SCREEN,
+    val slideToAnswerMode: SlideToAnswerMode = SlideToAnswerMode.LOCKED_ONLY,
+    val favoriteNumbers: Set<String> = emptySet()
 ) {
     companion object {
         val DEFAULT_QUICK_REPLIES = listOf(

@@ -92,11 +92,13 @@ jobs:
           RELEASE_NOTES="Tap Shajamal.apk below to download and install directly on your Android phone.
 
           Latest updates:
-          - Pure Dual-SIM experience (SIM 1 & SIM 2 only — all Brilliant Connect tabs & options removed)
-          - Even faster cold startup (zero-contention Recents-first loading, lazy sound engine, cached time formatters)
-          - Rich animations for BOTH Outgoing calls (rotating orbital halo, 3-layer radar waves, signal bars & moving arrows) and Incoming calls (shockwaves, shaking handset & glowing pills)
-          - Save Contacts with Photo & Full Details directly in Shajamal (gallery photo picker, alternate phone, email, company, job title, address & notes)
-          - 6 rich app background color themes, contact photos in Recents, swipe right to call, swipe left to delete, compact T9 dialpad, Unknown Caller ID & Call Recording"
+          - Liquid Glass Call Screen: Atmospheric frosted glass backdrop, luminous glass avatar sphere, 3x2 frosted action grid (Speaker, Hold, Mute, Add, End Call, Keypad) & 1-tap Call Record pill
+          - Incoming Calls Upgrade: Message & Callback Reminder quick actions + adaptive Slide to Answer bar (Show only when locked / Always / Never)
+          - Favorites Tab: Dedicated Favorites tab with Edit mode, + Add Favorite picker & 1-tap calling
+          - Display Options in Settings: Liquid Glass toggle, Display Theme (System / Light / Dark), Font Size (Small / Medium / Large), Incoming Calls (Full Screen / Banner) & Slide to Answer
+          - Floating Liquid Glass Bottom Pill Bar (Favorites, Recents, Contacts, Keypad) & Circular Liquid Glass Keypad
+          - Contacts A-Z Fast-Scroll Alphabet Index + Voice Search & Recents Edit / All-Missed Pill Toggle / Search
+          - Truecaller-style Unknown Caller ID ('Know Exactly Who's Calling'), Save Contact with Photo & Pure Dual-SIM (SIM 1 & SIM 2)"
 
           if gh release view latest-apk >/dev/null 2>&1; then
             gh release upload latest-apk Shajamal.apk --clobber

@@ -6,12 +6,16 @@ import com.example.data.local.CallNoteEntity
 import com.example.data.local.NovaCallDao
 import com.example.data.local.PreferencesRepository
 import com.example.data.local.SpeedDialEntity
+import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
+import com.example.data.model.DisplayThemeMode
+import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
+import com.example.data.model.SlideToAnswerMode
 import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
 import kotlinx.coroutines.flow.Flow
@@ -116,4 +120,10 @@ class DialerRepository(
     suspend fun updateAutoRejectBlocked(enabled: Boolean) = preferencesRepository.updateAutoRejectBlocked(enabled)
     suspend fun updateAutoSpeaker(enabled: Boolean) = preferencesRepository.updateAutoSpeaker(enabled)
     suspend fun updateQuickReplies(replies: List<String>) = preferencesRepository.updateQuickReplies(replies)
+    suspend fun updateLiquidGlass(enabled: Boolean) = preferencesRepository.updateLiquidGlass(enabled)
+    suspend fun updateDisplayThemeMode(mode: DisplayThemeMode) = preferencesRepository.updateDisplayThemeMode(mode)
+    suspend fun updateFontScale(scale: AppFontScale) = preferencesRepository.updateFontScale(scale)
+    suspend fun updateIncomingCallDisplayStyle(style: IncomingCallDisplayStyle) = preferencesRepository.updateIncomingCallDisplayStyle(style)
+    suspend fun updateSlideToAnswerMode(mode: SlideToAnswerMode) = preferencesRepository.updateSlideToAnswerMode(mode)
+    suspend fun updateFavoriteNumbers(numbers: Set<String>) = preferencesRepository.updateFavoriteNumbers(numbers)
 }

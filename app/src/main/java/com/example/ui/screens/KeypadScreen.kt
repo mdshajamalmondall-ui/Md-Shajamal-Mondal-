@@ -191,23 +191,47 @@ fun KeypadScreen(
                             SimMiniDot(label = state.sim2.displayName, color = nova.sim2)
                         }
                     }
-                    Surface(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onOpenSettings)
-                            .testTag("open_settings_button"),
-                        shape = CircleShape,
-                        color = nova.glassSurface,
-                        border = BorderStroke(1.dp, nova.glassBorder)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Settings,
-                                contentDescription = stringResource(R.string.cd_settings),
-                                tint = nova.gold,
-                                modifier = Modifier.size(21.dp)
-                            )
+                        Surface(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .clickable { onAddContact(state.dialedDigits) }
+                                .testTag("keypad_top_add_contact_button"),
+                            shape = CircleShape,
+                            color = nova.glassSurface,
+                            border = BorderStroke(1.dp, nova.glassBorder)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.PersonAdd,
+                                    contentDescription = stringResource(R.string.cd_add_contact),
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Surface(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onOpenSettings)
+                                .testTag("open_settings_button"),
+                            shape = CircleShape,
+                            color = nova.glassSurface,
+                            border = BorderStroke(1.dp, nova.glassBorder)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Settings,
+                                    contentDescription = stringResource(R.string.cd_settings),
+                                    tint = nova.gold,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -555,17 +579,17 @@ fun KeypadScreen(
                 }
             }
 
-            // Compact Glassmorphic T9 Keypad Grid
+            // Compact Circular Liquid Glass T9 Keypad Grid (matching Screenshot 5)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                    .padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 DIAL_ROWS.forEach { row ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         row.forEach { spec ->
                             val speedDial = spec.digitNum?.let { speedDialMap[it] }
@@ -574,8 +598,7 @@ fun KeypadScreen(
                                 speedDial = speedDial,
                                 hapticEnabled = state.preferences.hapticEnabled,
                                 onPress = { onDigitPress(spec.primary) },
-                                onLongPress = { onDigitLongPress(spec.primary) },
-                                modifier = Modifier.weight(1f)
+                                onLongPress = { onDigitLongPress(spec.primary) }
                             )
                         }
                     }
@@ -592,7 +615,7 @@ fun KeypadScreen(
                 onCallSim2 = { onCallRoute(state.dialedDigits, CallRoute.SIM_2, null) }
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(78.dp))
         }
     }
 }
@@ -730,8 +753,8 @@ private fun DialKeyButton(
 
     Surface(
         modifier = modifier
-            .height(50.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .size(62.dp)
+            .clip(CircleShape)
             .combinedClickable(
                 onClick = {
                     if (hapticEnabled) {
@@ -747,12 +770,21 @@ private fun DialKeyButton(
                 }
             )
             .testTag("dial_key_${spec.primary}"),
-        shape = RoundedCornerShape(16.dp),
-        color = nova.glassSurface.copy(alpha = if (nova.isDark) 0.88f else 0.96f),
+        shape = CircleShape,
+        color = nova.glassSurface.copy(
+            alpha = when {
+                nova.liquidGlassEnabled && nova.isDark -> 0.80f
+                nova.liquidGlassEnabled && !nova.isDark -> 0.94f
+                else -> 1f
+            }
+        ),
         border = BorderStroke(
             width = 1.dp,
-            color = if (speedDial != null) nova.gold.copy(alpha = 0.45f) else nova.glassBorder.copy(alpha = 0.7f)
-        )
+            color = if (speedDial != null) nova.gold.copy(alpha = 0.55f)
+            else if (nova.liquidGlassEnabled) Color.White.copy(alpha = if (nova.isDark) 0.16f else 0.70f)
+            else nova.glassBorder.copy(alpha = 0.7f)
+        ),
+        shadowElevation = if (nova.liquidGlassEnabled && !nova.isDark) 3.dp else 0.dp
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -762,15 +794,15 @@ private fun DialKeyButton(
             Text(
                 text = spec.primary,
                 style = MaterialTheme.typography.headlineSmall.copy(
-                    fontSize = 21.sp,
+                    fontSize = 23.sp,
                     fontWeight = FontWeight.SemiBold,
-                    lineHeight = 23.sp
+                    lineHeight = 25.sp
                 ),
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (speedDial != null) {
                 Text(
-                    text = speedDial.name.take(8),
+                    text = speedDial.name.take(7),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.5.sp, lineHeight = 10.sp),
                     color = nova.gold,
                     maxLines = 1,
