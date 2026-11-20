@@ -13,6 +13,7 @@ import com.example.InCallActivity
 import com.example.data.cloud.CallerIdIntelligence
 import com.example.data.cloud.CallerIdRepository
 import com.example.data.cloud.CallerIdSource
+import com.google.firebase.FirebaseApp
 import com.example.data.local.NovaCallDatabase
 import com.example.data.local.PreferencesRepository
 import com.example.data.model.normalizePhoneNumber
@@ -149,9 +150,14 @@ object CallStateManager {
                 }?.note
             }.getOrNull()
 
-            // If caller is NOT saved in device contacts, query NovaCall Cloud Community Caller ID!
+            // If caller is NOT saved in device contacts, query Cloud Community Caller ID (or offline operator lookup)
             val cloudLookup = if (contactName.isNullOrBlank()) {
-                runCatching { CallerIdRepository(context).lookupNumber(rawNumber) }.getOrNull()
+                if (FirebaseApp.getApps(context).isNotEmpty()) {
+                    runCatching { CallerIdRepository(context).lookupNumber(rawNumber) }
+                        .getOrElse { CallerIdIntelligence.detectOffline(rawNumber) }
+                } else {
+                    CallerIdIntelligence.detectOffline(rawNumber)
+                }
             } else null
 
             val resolvedName = contactName

@@ -312,36 +312,38 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            color = nova.glassBorder.copy(alpha = 0.5f)
-                        )
+                        if (signedInEmail != null || cloudProfile != null) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 10.dp),
+                                color = nova.glassBorder.copy(alpha = 0.5f)
+                            )
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                                Text(
-                                    text = if (isBn) "সংযুক্ত Google অ্যাকাউন্ট" else "Signed-In Account",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = signedInEmail ?: cloudProfile?.displayName ?: "Google User",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            OutlinedButton(
-                                onClick = onSignOut,
-                                modifier = Modifier.testTag("settings_sign_out_button"),
-                                shape = RoundedCornerShape(12.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isBn) "সাইন আউট" else "Sign Out", style = MaterialTheme.typography.labelMedium)
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                    Text(
+                                        text = if (isBn) "সংযুক্ত Google অ্যাকাউন্ট" else "Signed-In Account",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = signedInEmail ?: cloudProfile?.displayName ?: "Google User",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                OutlinedButton(
+                                    onClick = onSignOut,
+                                    modifier = Modifier.testTag("settings_sign_out_button"),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(if (isBn) "সাইন আউট" else "Sign Out", style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                     }

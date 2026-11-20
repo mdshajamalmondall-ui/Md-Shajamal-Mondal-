@@ -22,6 +22,7 @@ import com.example.ui.screens.AuthScreen
 import com.example.ui.theme.NovaCallTheme
 import com.example.ui.viewmodel.DialerViewModel
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.auth
 
 class MainActivity : ComponentActivity() {
@@ -34,46 +35,78 @@ class MainActivity : ComponentActivity() {
         captureDialIntent(intent)
 
         setContent {
-            val auth = Firebase.auth
-            val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
-            val credentialManager = remember { CredentialManager.create(this@MainActivity) }
-            val scope = rememberCoroutineScope()
+            val isFirebaseInitialized = remember {
+                FirebaseApp.getApps(this@MainActivity).isNotEmpty() ||
+                    runCatching { FirebaseApp.initializeApp(this@MainActivity) != null }.getOrDefault(false)
+            }
 
-            val user = currentUser
-            if (user == null) {
-                NovaCallTheme(darkTheme = true) {
-                    AuthScreen(onAuthSuccess = {})
+            if (isFirebaseInitialized) {
+                val auth = Firebase.auth
+                val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
+                val credentialManager = remember { CredentialManager.create(this@MainActivity) }
+                val scope = rememberCoroutineScope()
+
+                val user = currentUser
+                if (user == null) {
+                    NovaCallTheme(darkTheme = true) {
+                        AuthScreen(onAuthSuccess = {})
+                    }
+                } else {
+                    key(user.uid) {
+                        val dialerViewModel: DialerViewModel = viewModel(
+                            key = user.uid,
+                            factory = DialerViewModel.factory(
+                                application = application,
+                                currentUserId = user.uid,
+                                userDisplayNameHint = user.displayName ?: user.email?.substringBefore("@") ?: "Shajamal User",
+                                enableCloudCallerId = true
+                            )
+                        )
+
+                        LaunchedEffect(pendingDialNumber) {
+                            val number = pendingDialNumber
+                            if (!number.isNullOrBlank()) {
+                                dialerViewModel.prefillNumberFromIntent(number)
+                                pendingDialNumber = null
+                            }
+                        }
+
+                        NovaCallApp(
+                            viewModel = dialerViewModel,
+                            signedInEmail = user.email,
+                            onSignOut = {
+                                signOutFromNovaCall(
+                                    credentialManager = credentialManager,
+                                    scope = scope
+                                )
+                            }
+                        )
+                    }
                 }
             } else {
-                key(user.uid) {
-                    val dialerViewModel: DialerViewModel = viewModel(
-                        key = user.uid,
-                        factory = DialerViewModel.factory(
-                            application = application,
-                            currentUserId = user.uid,
-                            userDisplayNameHint = user.displayName ?: user.email?.substringBefore("@") ?: "Shajamal User"
-                        )
+                val dialerViewModel: DialerViewModel = viewModel(
+                    key = "local_offline_session",
+                    factory = DialerViewModel.factory(
+                        application = application,
+                        currentUserId = "",
+                        userDisplayNameHint = "Shajamal User",
+                        enableCloudCallerId = false
                     )
+                )
 
-                    LaunchedEffect(pendingDialNumber) {
-                        val number = pendingDialNumber
-                        if (!number.isNullOrBlank()) {
-                            dialerViewModel.prefillNumberFromIntent(number)
-                            pendingDialNumber = null
-                        }
+                LaunchedEffect(pendingDialNumber) {
+                    val number = pendingDialNumber
+                    if (!number.isNullOrBlank()) {
+                        dialerViewModel.prefillNumberFromIntent(number)
+                        pendingDialNumber = null
                     }
-
-                    NovaCallApp(
-                        viewModel = dialerViewModel,
-                        signedInEmail = user.email,
-                        onSignOut = {
-                            signOutFromNovaCall(
-                                credentialManager = credentialManager,
-                                scope = scope
-                            )
-                        }
-                    )
                 }
+
+                NovaCallApp(
+                    viewModel = dialerViewModel,
+                    signedInEmail = null,
+                    onSignOut = {}
+                )
             }
         }
     }

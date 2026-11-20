@@ -40,6 +40,7 @@ import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
 import com.example.data.telephony.CallNotificationHelper
 import com.example.data.telephony.TelephonyBridgeManager
+import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
@@ -53,6 +54,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -162,7 +164,7 @@ private data class UiInputSnapshot(
 class DialerViewModel(
     private val repository: DialerRepository,
     private val telephony: TelephonyBridgeManager,
-    private val callerIdRepository: CallerIdRepository,
+    private val callerIdRepository: CallerIdRepository?,
     private val currentUserId: String,
     private val userDisplayNameHint: String
 ) : ViewModel() {
@@ -196,8 +198,13 @@ class DialerViewModel(
     private val _events = MutableSharedFlow<DialerUiEvent>(extraBufferCapacity = 8)
     val events: SharedFlow<DialerUiEvent> = _events.asSharedFlow()
 
-    private val cloudProfileFlow: StateFlow<UserCloudProfile?> = callerIdRepository
-        .observeUserProfile(currentUserId)
+    private val cloudProfileFlow: StateFlow<UserCloudProfile?> = (
+        if (callerIdRepository != null && currentUserId.isNotBlank()) {
+            callerIdRepository.observeUserProfile(currentUserId)
+        } else {
+            flowOf(null)
+        }
+        )
         .catch { error ->
             val firestoreError = generateSequence(error) { it.cause }
                 .filterIsInstance<FirebaseFirestoreException>()
@@ -209,8 +216,13 @@ class DialerViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
 
-    private val myTagsFlow: StateFlow<List<CallerDirectoryEntry>> = callerIdRepository
-        .observeMyContributedTags(currentUserId)
+    private val myTagsFlow: StateFlow<List<CallerDirectoryEntry>> = (
+        if (callerIdRepository != null && currentUserId.isNotBlank()) {
+            callerIdRepository.observeMyContributedTags(currentUserId)
+        } else {
+            flowOf(emptyList())
+        }
+        )
         .catch { error ->
             val firestoreError = generateSequence(error) { it.cause }
                 .filterIsInstance<FirebaseFirestoreException>()
@@ -328,8 +340,10 @@ class DialerViewModel(
 
     init {
         refreshSystemData()
-        viewModelScope.launch {
-            callerIdRepository.ensureUserProfile(userDisplayNameHint)
+        if (callerIdRepository != null && currentUserId.isNotBlank()) {
+            viewModelScope.launch {
+                callerIdRepository.ensureUserProfile(userDisplayNameHint)
+            }
         }
         viewModelScope.launch {
             repository.preferences.collect { prefs ->
@@ -414,7 +428,8 @@ class DialerViewModel(
         dialedLookupResult.value = CallerIdIntelligence.detectOffline(rawInput)
 
         val callerIdEnabled = cloudProfileFlow.value?.callerIdEnabled ?: true
-        if (!callerIdEnabled || digitsOnly.length < 4) {
+        val repo = callerIdRepository
+        if (!callerIdEnabled || digitsOnly.length < 4 || repo == null) {
             isLookingUpCallerId.value = false
             return
         }
@@ -422,7 +437,7 @@ class DialerViewModel(
         lookupJob = viewModelScope.launch {
             delay(320L)
             isLookingUpCallerId.value = true
-            val result = callerIdRepository.lookupNumber(rawInput)
+            val result = repo.lookupNumber(rawInput)
             if (dialedDigits.value.filter { it.isDigit() } == digitsOnly) {
                 dialedLookupResult.value = result
             }
@@ -433,7 +448,37 @@ class DialerViewModel(
     fun publishCallerTag(number: String, name: String, category: CallerCategory) {
         viewModelScope.launch {
             val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
-            val res = callerIdRepository.publishCallerTag(number, name, category)
+            val repo = callerIdRepository
+            if (repo == null) {
+                val cleanName = name.trim()
+                val cleanNum = number.trim()
+                if (cleanName.isBlank() || cleanNum.isBlank()) return@launch
+                repository.saveCallNote(
+                    number = cleanNum,
+                    contactName = cleanName,
+                    note = cleanName,
+                    hasReminder = false
+                )
+                if (category == CallerCategory.SPAM) {
+                    repository.blockNumber(cleanNum, cleanName, "Spam")
+                }
+                val offline = CallerIdIntelligence.detectOffline(cleanNum)
+                dialedLookupResult.value = (offline ?: CallerIdLookupResult(
+                    phoneKey = cleanNum.filter { it.isDigit() },
+                    displayName = cleanName,
+                    carrierOrRegion = ""
+                )).copy(
+                    displayName = cleanName,
+                    category = category,
+                    spamReports = if (category == CallerCategory.SPAM) 1L else 0L
+                )
+                emitMessage(
+                    if (isBn) "লোকাল কলার আইডি সেভ হয়েছে: $cleanName"
+                    else "Saved local Caller ID: $cleanName"
+                )
+                return@launch
+            }
+            val res = repo.publishCallerTag(number, name, category)
             res.onSuccess { published ->
                 if (dialedDigits.value.isNotBlank()) {
                     dialedLookupResult.value = published
@@ -453,7 +498,7 @@ class DialerViewModel(
 
     fun toggleCloudCallerIdEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            callerIdRepository.updateCloudCallerIdSettings(callerIdEnabled = enabled)
+            callerIdRepository?.updateCloudCallerIdSettings(callerIdEnabled = enabled)
             if (!enabled) {
                 dialedLookupResult.value = null
             } else if (dialedDigits.value.length >= 4) {
@@ -465,6 +510,14 @@ class DialerViewModel(
     fun syncContactsToCommunityCallerId() {
         viewModelScope.launch {
             val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+            val repo = callerIdRepository
+            if (repo == null) {
+                emitMessage(
+                    if (isBn) "এই বিল্ডে অফলাইন কলার আইডি চালু আছে (ক্লাউড সিঙ্ক অনুপলব্ধ)"
+                    else "Offline Caller ID mode active (cloud sync unavailable in this build)"
+                )
+                return@launch
+            }
             val contacts = systemSnapshot.value.contacts
             if (contacts.isEmpty()) {
                 emitMessage(
@@ -474,7 +527,7 @@ class DialerViewModel(
                 return@launch
             }
             isSyncingCommunityContacts.value = true
-            val res = callerIdRepository.syncOptInContacts(contacts)
+            val res = repo.syncOptInContacts(contacts)
             isSyncingCommunityContacts.value = false
             res.onSuccess { added ->
                 emitMessage(
@@ -928,13 +981,20 @@ class DialerViewModel(
         fun factory(
             application: Application,
             currentUserId: String,
-            userDisplayNameHint: String
+            userDisplayNameHint: String,
+            enableCloudCallerId: Boolean = true
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CallNotificationHelper.ensureChannels(application)
-                val databaseId = application.getString(R.string.firestore_database_id)
-                val firestore = FirebaseFirestore.getInstance(databaseId)
-                val callerIdRepo = CallerIdRepository(db = firestore)
+                val callerIdRepo = if (enableCloudCallerId && FirebaseApp.getApps(application).isNotEmpty()) {
+                    runCatching {
+                        val databaseId = application.getString(R.string.firestore_database_id)
+                        val firestore = FirebaseFirestore.getInstance(databaseId)
+                        CallerIdRepository(db = firestore)
+                    }.getOrNull()
+                } else {
+                    null
+                }
                 val roomDb = NovaCallDatabase.getInstance(application)
                 val prefsRepo = PreferencesRepository(application)
                 val dialerRepo = DialerRepository(roomDb.novaCallDao(), prefsRepo)
