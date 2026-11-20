@@ -1,6 +1,7 @@
 package com.example.ui.theme
 
 import android.app.Activity
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -12,6 +13,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.example.data.model.AppThemePalette
 
 @Immutable
 data class NovaExtendedColors(
@@ -32,23 +34,30 @@ data class NovaExtendedColors(
     val isDark: Boolean
 )
 
-private val DarkExtendedColors = NovaExtendedColors(
-    sim1 = Sim1Emerald,
-    sim1Container = Sim1EmeraldContainer,
-    sim2 = Sim2Azure,
-    sim2Container = Sim2AzureContainer,
-    brilliant = BrilliantViolet,
-    brilliantGlow = BrilliantVioletGlow,
-    brilliantContainer = BrilliantVioletContainer,
-    missed = MissedCoral,
-    missedContainer = MissedCoralContainer,
-    gold = ChampagneGold,
-    goldContainer = ChampagneGoldContainer,
-    whatsApp = WhatsAppGreen,
-    glassSurface = ObsidianSurfaceElevated,
-    glassBorder = ObsidianOutline,
-    isDark = true
-)
+private fun buildDarkExtended(surfaceElevated: Color, outline: Color, goldAccent: Color = ChampagneGold): NovaExtendedColors =
+    NovaExtendedColors(
+        sim1 = Sim1Emerald,
+        sim1Container = Sim1EmeraldContainer,
+        sim2 = Sim2Azure,
+        sim2Container = Sim2AzureContainer,
+        brilliant = BrilliantViolet,
+        brilliantGlow = BrilliantVioletGlow,
+        brilliantContainer = BrilliantVioletContainer,
+        missed = MissedCoral,
+        missedContainer = MissedCoralContainer,
+        gold = goldAccent,
+        goldContainer = ChampagneGoldContainer,
+        whatsApp = WhatsAppGreen,
+        glassSurface = surfaceElevated,
+        glassBorder = outline,
+        isDark = true
+    )
+
+private val SapphireExtendedColors = buildDarkExtended(ObsidianSurfaceElevated, ObsidianOutline)
+private val EmeraldExtendedColors = buildDarkExtended(EmeraldSurfaceElevated, EmeraldOutline, EmeraldPrimary)
+private val AmethystExtendedColors = buildDarkExtended(AmethystSurfaceElevated, AmethystOutline, AmethystPrimary)
+private val OceanExtendedColors = buildDarkExtended(OceanSurfaceElevated, OceanOutline, OceanPrimary)
+private val CrimsonExtendedColors = buildDarkExtended(CrimsonSurfaceElevated, CrimsonOutline, CrimsonPrimary)
 
 private val LightExtendedColors = NovaExtendedColors(
     sim1 = Sim1EmeraldLight,
@@ -68,13 +77,22 @@ private val LightExtendedColors = NovaExtendedColors(
     isDark = false
 )
 
-val LocalNovaColors = staticCompositionLocalOf { DarkExtendedColors }
+val LocalNovaColors = staticCompositionLocalOf { SapphireExtendedColors }
 
-private val DarkColorScheme = darkColorScheme(
-    primary = ChampagneGold,
+private fun buildDarkScheme(
+    primary: Color,
+    primaryContainer: Color,
+    bg: Color,
+    surface: Color,
+    surfaceElevated: Color,
+    surfaceHighest: Color,
+    outline: Color,
+    outlineSubtle: Color
+): ColorScheme = darkColorScheme(
+    primary = primary,
     onPrimary = OnChampagneGold,
-    primaryContainer = ChampagneGoldContainer,
-    onPrimaryContainer = ChampagneGold,
+    primaryContainer = primaryContainer,
+    onPrimaryContainer = primary,
     secondary = BrilliantViolet,
     onSecondary = Color.White,
     secondaryContainer = BrilliantVioletContainer,
@@ -83,22 +101,77 @@ private val DarkColorScheme = darkColorScheme(
     onTertiary = Color(0xFF042619),
     tertiaryContainer = Sim1EmeraldContainer,
     onTertiaryContainer = Sim1Emerald,
-    background = ObsidianBg,
+    background = bg,
     onBackground = TextPrimaryDark,
-    surface = ObsidianSurface,
+    surface = surface,
     onSurface = TextPrimaryDark,
-    surfaceVariant = ObsidianSurfaceElevated,
+    surfaceVariant = surfaceElevated,
     onSurfaceVariant = TextSecondaryDark,
-    surfaceContainerLowest = ObsidianBg,
-    surfaceContainerLow = ObsidianSurface,
-    surfaceContainer = ObsidianSurfaceElevated,
-    surfaceContainerHigh = ObsidianSurfaceHighest,
-    outline = ObsidianOutline,
-    outlineVariant = ObsidianOutlineSubtle,
+    surfaceContainerLowest = bg,
+    surfaceContainerLow = surface,
+    surfaceContainer = surfaceElevated,
+    surfaceContainerHigh = surfaceHighest,
+    outline = outline,
+    outlineVariant = outlineSubtle,
     error = MissedCoral,
     onError = Color.White,
     errorContainer = MissedCoralContainer,
     onErrorContainer = Color(0xFFFFD9DD)
+)
+
+private val SapphireColorScheme = buildDarkScheme(
+    primary = ChampagneGold,
+    primaryContainer = ChampagneGoldContainer,
+    bg = ObsidianBg,
+    surface = ObsidianSurface,
+    surfaceElevated = ObsidianSurfaceElevated,
+    surfaceHighest = ObsidianSurfaceHighest,
+    outline = ObsidianOutline,
+    outlineSubtle = ObsidianOutlineSubtle
+)
+
+private val EmeraldColorScheme = buildDarkScheme(
+    primary = EmeraldPrimary,
+    primaryContainer = EmeraldPrimaryContainer,
+    bg = EmeraldBg,
+    surface = EmeraldSurface,
+    surfaceElevated = EmeraldSurfaceElevated,
+    surfaceHighest = EmeraldSurfaceHighest,
+    outline = EmeraldOutline,
+    outlineSubtle = EmeraldOutlineSubtle
+)
+
+private val AmethystColorScheme = buildDarkScheme(
+    primary = AmethystPrimary,
+    primaryContainer = AmethystPrimaryContainer,
+    bg = AmethystBg,
+    surface = AmethystSurface,
+    surfaceElevated = AmethystSurfaceElevated,
+    surfaceHighest = AmethystSurfaceHighest,
+    outline = AmethystOutline,
+    outlineSubtle = AmethystOutlineSubtle
+)
+
+private val OceanColorScheme = buildDarkScheme(
+    primary = OceanPrimary,
+    primaryContainer = OceanPrimaryContainer,
+    bg = OceanBg,
+    surface = OceanSurface,
+    surfaceElevated = OceanSurfaceElevated,
+    surfaceHighest = OceanSurfaceHighest,
+    outline = OceanOutline,
+    outlineSubtle = OceanOutlineSubtle
+)
+
+private val CrimsonColorScheme = buildDarkScheme(
+    primary = CrimsonPrimary,
+    primaryContainer = CrimsonPrimaryContainer,
+    bg = CrimsonBg,
+    surface = CrimsonSurface,
+    surfaceElevated = CrimsonSurfaceElevated,
+    surfaceHighest = CrimsonSurfaceHighest,
+    outline = CrimsonOutline,
+    outlineSubtle = CrimsonOutlineSubtle
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -135,10 +208,29 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun NovaCallTheme(
     darkTheme: Boolean = true,
+    themePalette: AppThemePalette? = null,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
+    val resolvedPalette = themePalette
+        ?: if (darkTheme) AppThemePalette.ROYAL_SAPPHIRE else AppThemePalette.PEARL_WHITE
+    val isDark = resolvedPalette != AppThemePalette.PEARL_WHITE
+
+    val colorScheme = when (resolvedPalette) {
+        AppThemePalette.ROYAL_SAPPHIRE -> SapphireColorScheme
+        AppThemePalette.EMERALD_FOREST -> EmeraldColorScheme
+        AppThemePalette.ROYAL_AMETHYST -> AmethystColorScheme
+        AppThemePalette.OCEAN_TEAL -> OceanColorScheme
+        AppThemePalette.CRIMSON_VELVET -> CrimsonColorScheme
+        AppThemePalette.PEARL_WHITE -> LightColorScheme
+    }
+    val extendedColors = when (resolvedPalette) {
+        AppThemePalette.ROYAL_SAPPHIRE -> SapphireExtendedColors
+        AppThemePalette.EMERALD_FOREST -> EmeraldExtendedColors
+        AppThemePalette.ROYAL_AMETHYST -> AmethystExtendedColors
+        AppThemePalette.OCEAN_TEAL -> OceanExtendedColors
+        AppThemePalette.CRIMSON_VELVET -> CrimsonExtendedColors
+        AppThemePalette.PEARL_WHITE -> LightExtendedColors
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -146,8 +238,8 @@ fun NovaCallTheme(
             val window = (view.context as? Activity)?.window
             if (window != null) {
                 WindowCompat.getInsetsController(window, view).apply {
-                    isAppearanceLightStatusBars = !darkTheme
-                    isAppearanceLightNavigationBars = !darkTheme
+                    isAppearanceLightStatusBars = !isDark
+                    isAppearanceLightNavigationBars = !isDark
                 }
             }
         }

@@ -138,13 +138,13 @@ fun NovaCallApp(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        viewModel.refreshSystemData()
+        viewModel.refreshSystemData(force = true)
     }
 
     val defaultDialerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
-        viewModel.refreshSystemData()
+        viewModel.refreshSystemData(force = true)
     }
 
     val requestAllPermissions: () -> Unit = {
@@ -173,7 +173,7 @@ fun NovaCallApp(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshSystemData()
+                viewModel.refreshSystemData(force = false)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -189,24 +189,27 @@ fun NovaCallApp(
         }
     }
 
-    BackHandler(enabled = state.isSettingsOpen || state.activeTab != NovaTab.KEYPAD) {
+    BackHandler(enabled = state.isSettingsOpen || state.activeTab != NovaTab.RECENTS) {
         if (state.isSettingsOpen) {
             viewModel.closeSettings()
         } else {
-            viewModel.selectTab(NovaTab.KEYPAD)
+            viewModel.selectTab(NovaTab.RECENTS)
         }
     }
 
     val navItems = remember(strings) {
         listOf(
-            NavDestinationSpec(NovaTab.KEYPAD, strings.tabKeypad, Icons.Filled.Dialpad, Icons.Outlined.Dialpad, "nav_keypad"),
             NavDestinationSpec(NovaTab.RECENTS, strings.tabRecents, Icons.Filled.History, Icons.Outlined.History, "nav_recents"),
+            NavDestinationSpec(NovaTab.KEYPAD, strings.tabKeypad, Icons.Filled.Dialpad, Icons.Outlined.Dialpad, "nav_keypad"),
             NavDestinationSpec(NovaTab.CONTACTS, strings.tabContacts, Icons.Filled.Contacts, Icons.Outlined.Contacts, "nav_contacts"),
             NavDestinationSpec(NovaTab.BRIDGE, strings.tabBridge, Icons.Filled.Bolt, Icons.Outlined.Bolt, "nav_bridge")
         )
     }
 
-    NovaCallTheme(darkTheme = state.preferences.darkThemeEnabled) {
+    NovaCallTheme(
+        darkTheme = state.preferences.darkThemeEnabled,
+        themePalette = state.preferences.themePalette
+    ) {
         val nova = LocalNovaColors.current
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -351,6 +354,7 @@ fun NovaCallApp(
                                     onAddQuickReply = viewModel::addQuickReply,
                                     onRemoveQuickReply = viewModel::removeQuickReply,
                                     onToggleDarkTheme = viewModel::updateDarkTheme,
+                                    onSelectThemePalette = viewModel::updateThemePalette,
                                     onToggleLanguage = viewModel::updateLanguage,
                                     signedInEmail = signedInEmail,
                                     onToggleCloudCallerId = viewModel::toggleCloudCallerIdEnabled,
@@ -404,7 +408,9 @@ fun NovaCallApp(
                                         state = state,
                                         strings = strings,
                                         onSelectFilter = viewModel::updateRecentsFilter,
-                                        onRefresh = viewModel::refreshSystemData,
+                                        onRefresh = { viewModel.refreshSystemData(force = true) },
+                                        onOpenSettings = viewModel::openSettings,
+                                        onOpenKeypad = { viewModel.selectTab(NovaTab.KEYPAD) },
                                         onRequestPermissions = requestAllPermissions,
                                         onCallRoute = viewModel::placeCall,
                                         onOpenCallerDetail = viewModel::openCallerDetail,
@@ -447,6 +453,10 @@ fun NovaCallApp(
                                         strings = strings,
                                         onTestBridge = viewModel::testBrilliantBridge,
                                         onInstallBrilliant = { viewModel.openPlayStoreForBrilliant() },
+                                        onSaveBrilliantAccount = viewModel::updateBrilliantAccount,
+                                        onSelectLinkedCallingAccount = viewModel::updateBrilliantLinkedAccountId,
+                                        onOpenCallingAccountsSettings = viewModel::openCallingAccountsSettings,
+                                        onToggleBrilliantExternalHandoff = viewModel::updateBrilliantExternalHandoff,
                                         onUpdateBrilliantPackage = viewModel::updateBrilliantPackage,
                                         onUpdateLaunchMode = viewModel::updateBrilliantLaunchMode,
                                         onUpdateAutoBd = viewModel::updateBrilliantAutoFormatBd,
@@ -466,6 +476,7 @@ fun NovaCallApp(
                                         onAddQuickReply = viewModel::addQuickReply,
                                         onRemoveQuickReply = viewModel::removeQuickReply,
                                         onToggleDarkTheme = viewModel::updateDarkTheme,
+                                        onSelectThemePalette = viewModel::updateThemePalette,
                                         onToggleDtmf = viewModel::updateDtmfSound,
                                         onToggleHaptic = viewModel::updateHaptic,
                                         onToggleLanguage = viewModel::updateLanguage

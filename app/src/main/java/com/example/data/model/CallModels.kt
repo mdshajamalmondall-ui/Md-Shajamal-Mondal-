@@ -49,6 +49,22 @@ enum class AppLanguage {
     ENGLISH
 }
 
+enum class AppThemePalette {
+    ROYAL_SAPPHIRE,
+    EMERALD_FOREST,
+    ROYAL_AMETHYST,
+    OCEAN_TEAL,
+    CRIMSON_VELVET,
+    PEARL_WHITE
+}
+
+data class CallingAccountOption(
+    val id: String,
+    val label: String,
+    val packageName: String,
+    val isVoipOrBrilliant: Boolean
+)
+
 data class SimCardInfo(
     val slotIndex: Int,
     val subscriptionId: Int,
@@ -64,7 +80,8 @@ data class BrilliantBridgeStatus(
     val packageName: String = DEFAULT_BRILLIANT_PACKAGE,
     val appLabel: String = "Brilliant Connect",
     val hasTelecomVoipAccount: Boolean = false,
-    val telecomAccountLabel: String? = null
+    val telecomAccountLabel: String? = null,
+    val availableCallingAccounts: List<CallingAccountOption> = emptyList()
 ) {
     companion object {
         const val DEFAULT_BRILLIANT_PACKAGE = "com.brilliant.connect.com.bd"
@@ -104,6 +121,9 @@ data class UserPreferences(
     val brilliantAutoCopyClipboard: Boolean = true,
     val brilliantSmartPrefixes: String = "+,00",
     val brilliantExternalHandoff: Boolean = false,
+    val brilliantAccountName: String = "",
+    val brilliantAccountNumber: String = "",
+    val brilliantLinkedAccountId: String = "",
     val defaultRoute: DefaultRoutePreference = DefaultRoutePreference.ASK,
     val sim1Alias: String = "",
     val sim2Alias: String = "",
@@ -112,6 +132,7 @@ data class UserPreferences(
     val keypadSoundVolume: Float = 0.9f,
     val hapticEnabled: Boolean = true,
     val darkThemeEnabled: Boolean = true,
+    val themePalette: AppThemePalette = AppThemePalette.ROYAL_SAPPHIRE,
     val language: AppLanguage = AppLanguage.BENGALI,
     val notifyIncomingCalls: Boolean = true,
     val notifyMissedCalls: Boolean = true,

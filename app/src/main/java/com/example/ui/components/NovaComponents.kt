@@ -38,11 +38,28 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Palette
 import com.example.data.model.AppLanguage
+import com.example.data.model.AppThemePalette
 import com.example.data.model.BrilliantBridgeStatus
 import com.example.data.model.CallRoute
 import com.example.ui.i18n.NovaStrings
+import com.example.ui.theme.AmethystBg
+import com.example.ui.theme.AmethystPrimary
+import com.example.ui.theme.ChampagneGold
+import com.example.ui.theme.CrimsonBg
+import com.example.ui.theme.CrimsonPrimary
+import com.example.ui.theme.EmeraldBg
+import com.example.ui.theme.EmeraldPrimary
+import com.example.ui.theme.GoldLightPrimary
 import com.example.ui.theme.LocalNovaColors
+import com.example.ui.theme.ObsidianBg
+import com.example.ui.theme.OceanBg
+import com.example.ui.theme.OceanPrimary
+import com.example.ui.theme.PearlBg
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -286,5 +303,110 @@ fun formatCallDuration(durationSeconds: Long, language: AppLanguage): String {
         if (language == AppLanguage.BENGALI) "${mins}মি ${secs}সে" else "${mins}m ${secs}s"
     } else {
         if (language == AppLanguage.BENGALI) "${secs}সে" else "${secs}s"
+    }
+}
+
+private data class ThemeSwatchSpec(
+    val palette: AppThemePalette,
+    val labelBn: String,
+    val labelEn: String,
+    val bgColor: Color,
+    val accentColor: Color
+)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ThemePalettePicker(
+    selectedPalette: AppThemePalette,
+    language: AppLanguage,
+    onSelectPalette: (AppThemePalette) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val nova = LocalNovaColors.current
+    val isBn = language == AppLanguage.BENGALI
+    val options = listOf(
+        ThemeSwatchSpec(AppThemePalette.ROYAL_SAPPHIRE, "রয়েল নীল", "Sapphire", ObsidianBg, ChampagneGold),
+        ThemeSwatchSpec(AppThemePalette.EMERALD_FOREST, "সবুজ ফরেস্ট", "Emerald", EmeraldBg, EmeraldPrimary),
+        ThemeSwatchSpec(AppThemePalette.ROYAL_AMETHYST, "রয়েল বেগুনি", "Amethyst", AmethystBg, AmethystPrimary),
+        ThemeSwatchSpec(AppThemePalette.OCEAN_TEAL, "ওশান টিল", "Ocean", OceanBg, OceanPrimary),
+        ThemeSwatchSpec(AppThemePalette.CRIMSON_VELVET, "মেরুন ভেলভেট", "Crimson", CrimsonBg, CrimsonPrimary),
+        ThemeSwatchSpec(AppThemePalette.PEARL_WHITE, "পার্ল হোয়াইট", "Pearl", PearlBg, GoldLightPrimary)
+    )
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Palette,
+                contentDescription = null,
+                tint = nova.gold,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = if (isBn) "অ্যাপের ব্যাকগ্রাউন্ড কালার" else "App Background Color",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            options.forEach { spec ->
+                val isSelected = selectedPalette == spec.palette
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onSelectPalette(spec.palette) }
+                        .testTag("theme_palette_${spec.palette.name.lowercase()}"),
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = if (isSelected) 1.5.dp else 1.dp,
+                        color = if (isSelected) spec.accentColor else nova.glassBorder
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(spec.bgColor)
+                                .border(2.dp, spec.accentColor, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = spec.accentColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = if (isBn) spec.labelBn else spec.labelEn,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
     }
 }

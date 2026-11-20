@@ -56,7 +56,10 @@ class InCallActivity : ComponentActivity() {
                 }
             }
 
-            NovaCallTheme(darkTheme = prefs.darkThemeEnabled) {
+            NovaCallTheme(
+                darkTheme = prefs.darkThemeEnabled,
+                themePalette = prefs.themePalette
+            ) {
                 activeCall?.let { state ->
                     InCallScreen(
                         callState = state,

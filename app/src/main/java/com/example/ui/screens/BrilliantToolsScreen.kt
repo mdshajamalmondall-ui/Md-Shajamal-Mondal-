@@ -25,14 +25,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.SettingsPhone
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.Tune
@@ -70,9 +74,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.model.AppLanguage
+import com.example.data.model.AppThemePalette
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
+import com.example.ui.components.ThemePalettePicker
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
 import com.example.ui.viewmodel.DialerUiState
@@ -84,6 +90,10 @@ fun BrilliantToolsScreen(
     strings: NovaStrings,
     onTestBridge: () -> Unit,
     onInstallBrilliant: () -> Unit,
+    onSaveBrilliantAccount: (String, String) -> Unit,
+    onSelectLinkedCallingAccount: (String) -> Unit,
+    onOpenCallingAccountsSettings: () -> Unit,
+    onToggleBrilliantExternalHandoff: (Boolean) -> Unit,
     onUpdateBrilliantPackage: (String) -> Unit,
     onUpdateLaunchMode: (BrilliantLaunchMode) -> Unit,
     onUpdateAutoBd: (Boolean) -> Unit,
@@ -99,12 +109,20 @@ fun BrilliantToolsScreen(
     onAddQuickReply: (String) -> Unit,
     onRemoveQuickReply: (String) -> Unit,
     onToggleDarkTheme: (Boolean) -> Unit,
+    onSelectThemePalette: (AppThemePalette) -> Unit,
     onToggleDtmf: (Boolean) -> Unit,
     onToggleHaptic: (Boolean) -> Unit,
     onToggleLanguage: (AppLanguage) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val nova = LocalNovaColors.current
+    val isBn = state.preferences.language == AppLanguage.BENGALI
+    var brilliantNameInput by remember(state.preferences.brilliantAccountName) {
+        mutableStateOf(state.preferences.brilliantAccountName)
+    }
+    var brilliantNumberInput by remember(state.preferences.brilliantAccountNumber) {
+        mutableStateOf(state.preferences.brilliantAccountNumber)
+    }
     var pkgInput by remember(state.preferences.brilliantPackageName) {
         mutableStateOf(state.preferences.brilliantPackageName)
     }
@@ -278,6 +296,220 @@ fun BrilliantToolsScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // 1B. Brilliant Account & In-App Calling Setup
+            item {
+                val hasSavedAccount = state.preferences.brilliantAccountNumber.isNotBlank()
+                ToolsSectionCard(
+                    title = if (isBn) "ব্রিলিয়ান্ট অ্যাকাউন্ট ও ইন-অ্যাপ কল" else "Brilliant Account & In-App Calling",
+                    icon = Icons.Filled.AccountCircle,
+                    iconTint = nova.brilliant
+                ) {
+                    if (hasSavedAccount) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            color = nova.brilliantContainer.copy(alpha = 0.65f),
+                            border = BorderStroke(1.dp, nova.brilliant.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = nova.sim1,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = state.preferences.brilliantAccountName.ifBlank {
+                                            if (isBn) "ব্রিলিয়ান্ট অ্যাকাউন্ট যুক্ত আছে" else "Brilliant Account Linked"
+                                        },
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = state.preferences.brilliantAccountNumber,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = nova.brilliant
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    Text(
+                        text = if (isBn) {
+                            "আপনার ব্রিলিয়ান্ট নম্বর যুক্ত করুন এবং ফোনের Calling Account লিংক করুন যাতে বাইরের অ্যাপে না গিয়ে Shajamal থেকেই কল করা যায়।"
+                        } else {
+                            "Save your Brilliant number and link an Android Calling Account so Brilliant calls stay directly inside Shajamal."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = brilliantNameInput,
+                        onValueChange = { brilliantNameInput = it },
+                        label = {
+                            Text(if (isBn) "অ্যাকাউন্ট নাম (যেমন: শাজামাল)" else "Account Name")
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("brilliant_account_name_input"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = nova.brilliant,
+                            unfocusedBorderColor = nova.glassBorder
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = brilliantNumberInput,
+                            onValueChange = { brilliantNumberInput = it },
+                            label = {
+                                Text(if (isBn) "ব্রিলিয়ান্ট নম্বর (09638...)" else "Brilliant Number (09638...)")
+                            },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("brilliant_account_number_input"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = nova.brilliant,
+                                unfocusedBorderColor = nova.glassBorder
+                            )
+                        )
+                        Button(
+                            onClick = {
+                                onSaveBrilliantAccount(brilliantNameInput, brilliantNumberInput)
+                            },
+                            modifier = Modifier.testTag("save_brilliant_account_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = nova.brilliant,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(strings.save, style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    ToggleSettingRow(
+                        title = if (isBn) "বাইরের ব্রিলিয়ান্ট অ্যাপে না যেয়ে Shajamal থেকেই কল দিন" else "Keep Brilliant Calls Inside Shajamal",
+                        subtitle = if (isBn) {
+                            "চালু থাকলে ব্রিলিয়ান্ট বাটনে চাপলে বাইরের অ্যাপে নিয়ে যাবে না—Shajamal-এর ভেতরেই কল চালু হবে।"
+                        } else {
+                            "When ON, tapping Brilliant never jumps out to the external Brilliant app—calls stay inside Shajamal."
+                        },
+                        checked = !state.preferences.brilliantExternalHandoff,
+                        onCheckedChange = { keepInApp -> onToggleBrilliantExternalHandoff(!keepInApp) },
+                        testTag = "toggle_brilliant_keep_in_app"
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = nova.glassBorder.copy(alpha = 0.5f)
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PhoneInTalk,
+                            contentDescription = null,
+                            tint = nova.brilliant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (isBn) "লিংক করা কলিং অ্যাকাউন্ট (VoIP / SIP / SIM)" else "Linked Calling Account (VoIP / SIP / SIM)",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val accounts = state.brilliantStatus.availableCallingAccounts
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = state.preferences.brilliantLinkedAccountId.isBlank(),
+                            onClick = { onSelectLinkedCallingAccount("") },
+                            modifier = Modifier.testTag("calling_account_auto"),
+                            label = {
+                                Text(
+                                    text = if (isBn) "অটো-ডিটেক্ট" else "Auto-Detect",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = nova.brilliantContainer,
+                                selectedLabelColor = nova.brilliant
+                            )
+                        )
+                        accounts.forEach { acc ->
+                            FilterChip(
+                                selected = state.preferences.brilliantLinkedAccountId == acc.id,
+                                onClick = { onSelectLinkedCallingAccount(acc.id) },
+                                label = {
+                                    Text(
+                                        text = if (acc.isVoipOrBrilliant) "⚡ ${acc.label}" else acc.label,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = nova.brilliantContainer,
+                                    selectedLabelColor = nova.brilliant
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = onOpenCallingAccountsSettings,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_calling_accounts_settings_button"),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, nova.brilliant.copy(alpha = 0.65f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = nova.brilliant)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SettingsPhone,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isBn) "ফোনের Calling Accounts সেটিংস খুলুন" else "Open Phone Calling Accounts Settings",
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
                 }
             }
@@ -692,6 +924,15 @@ fun BrilliantToolsScreen(
                     icon = Icons.Filled.Tune,
                     iconTint = nova.gold
                 ) {
+                    ThemePalettePicker(
+                        selectedPalette = state.preferences.themePalette,
+                        language = state.preferences.language,
+                        onSelectPalette = onSelectThemePalette
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = nova.glassBorder.copy(alpha = 0.5f)
+                    )
                     ToggleSettingRow(
                         title = strings.darkModeLabel,
                         subtitle = null,

@@ -25,6 +25,7 @@ import com.example.data.local.NovaCallDatabase
 import com.example.data.local.PreferencesRepository
 import com.example.data.local.SpeedDialEntity
 import com.example.data.model.AppLanguage
+import com.example.data.model.AppThemePalette
 import com.example.data.model.BrilliantBridgeStatus
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallDirection
@@ -44,7 +45,10 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,7 +58,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -92,7 +99,7 @@ data class CloudCallerIdSnapshot(
 )
 
 data class DialerUiState(
-    val activeTab: NovaTab = NovaTab.KEYPAD,
+    val activeTab: NovaTab = NovaTab.RECENTS,
     val isSettingsOpen: Boolean = false,
     val isDefaultDialer: Boolean = false,
     val dialedDigits: String = "",
@@ -169,7 +176,7 @@ class DialerViewModel(
     private val userDisplayNameHint: String
 ) : ViewModel() {
 
-    private val activeTab = MutableStateFlow(NovaTab.KEYPAD)
+    private val activeTab = MutableStateFlow(NovaTab.RECENTS)
     private val isSettingsOpen = MutableStateFlow(false)
     private val dialedDigits = MutableStateFlow("")
     private val contactSearchQuery = MutableStateFlow("")
@@ -183,6 +190,12 @@ class DialerViewModel(
     private val cloudErrorMessage = MutableStateFlow<String?>(null)
     private val hiddenCallLogIds = MutableStateFlow<Set<String>>(emptySet())
     private var lookupJob: Job? = null
+    private var refreshJob: Job? = null
+    private var lastSystemRefreshMs: Long = 0L
+    @Volatile
+    private var cachedT9Index: List<Pair<DeviceContact, String>> = emptyList()
+    @Volatile
+    private var cachedT9ContactsRef: List<DeviceContact>? = null
 
     private val systemSnapshot = MutableStateFlow(
         SystemDataSnapshot(
@@ -337,28 +350,35 @@ class DialerViewModel(
             isLoadingSystemData = sys.isLoading,
             cloudCallerId = cloud
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = DialerUiState()
-    )
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = DialerUiState()
+        )
 
     init {
-        refreshSystemData()
+        refreshSystemData(force = true)
         if (callerIdRepository != null && currentUserId.isNotBlank()) {
-            viewModelScope.launch {
+            viewModelScope.launch(Dispatchers.IO) {
                 callerIdRepository.ensureUserProfile(userDisplayNameHint)
             }
         }
         viewModelScope.launch {
-            repository.preferences.collect { prefs ->
-                refreshBridgeAndSims(prefs)
-            }
+            repository.preferences
+                .map { Triple(it.sim1Alias, it.sim2Alias, it.brilliantPackageName) }
+                .distinctUntilChanged()
+                .collect {
+                    val prefs = uiState.value.preferences
+                    refreshBridgeAndSims(prefs)
+                }
         }
     }
 
     override fun onCleared() {
         lookupJob?.cancel()
+        refreshJob?.cancel()
         telephony.releaseToneGenerator()
         super.onCleared()
     }
@@ -373,42 +393,70 @@ class DialerViewModel(
         } else true
     )
 
-    fun refreshSystemData() {
-        viewModelScope.launch {
+    fun refreshSystemData(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && (refreshJob?.isActive == true || now - lastSystemRefreshMs < 1_500L)) {
+            // Still quickly update lightweight flags (permissions / default dialer) without re-querying DB
+            val perms = currentPermissions()
+            val isDef = telephony.isDefaultDialer()
+            val cur = systemSnapshot.value
+            if (cur.permissions != perms || cur.isDefaultDialer != isDef) {
+                systemSnapshot.value = cur.copy(permissions = perms, isDefaultDialer = isDef)
+            }
+            return
+        }
+        lastSystemRefreshMs = now
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch(Dispatchers.IO) {
             val perms = currentPermissions()
             val isDef = telephony.isDefaultDialer()
             systemSnapshot.value = systemSnapshot.value.copy(
                 permissions = perms,
                 isDefaultDialer = isDef,
-                isLoading = true
+                isLoading = systemSnapshot.value.systemCallLogs.isEmpty()
             )
             val prefs = uiState.value.preferences
-            val sims = telephony.loadSimCards(prefs)
-            val brilliant = telephony.inspectBrilliantBridge(prefs.brilliantPackageName)
-            val contacts = telephony.loadDeviceContacts()
-            val logs = telephony.loadSystemCallLogs()
-            systemSnapshot.value = SystemDataSnapshot(
-                permissions = perms,
-                isDefaultDialer = isDef,
-                simCards = sims,
-                brilliantStatus = brilliant,
-                contacts = contacts,
-                systemCallLogs = logs,
-                isLoading = false
-            )
+            coroutineScope {
+                val logsDeferred = async { telephony.loadSystemCallLogs() }
+                val simsDeferred = async { telephony.loadSimCards(prefs) }
+                val brilliantDeferred = async { telephony.inspectBrilliantBridge(prefs.brilliantPackageName) }
+                val contactsDeferred = async { telephony.loadDeviceContacts() }
+
+                // Emit call logs immediately so the Recents screen opens instantaneously!
+                val logs = logsDeferred.await()
+                systemSnapshot.value = systemSnapshot.value.copy(
+                    systemCallLogs = logs,
+                    isLoading = false
+                )
+
+                val sims = simsDeferred.await()
+                val brilliant = brilliantDeferred.await()
+                val contacts = contactsDeferred.await()
+                systemSnapshot.value = SystemDataSnapshot(
+                    permissions = perms,
+                    isDefaultDialer = isDef,
+                    simCards = sims,
+                    brilliantStatus = brilliant,
+                    contacts = contacts,
+                    systemCallLogs = logs,
+                    isLoading = false
+                )
+            }
         }
     }
 
     private fun refreshBridgeAndSims(prefs: UserPreferences) {
-        viewModelScope.launch {
-            val sims = telephony.loadSimCards(prefs)
-            val brilliant = telephony.inspectBrilliantBridge(prefs.brilliantPackageName)
-            systemSnapshot.value = systemSnapshot.value.copy(
-                permissions = currentPermissions(),
-                isDefaultDialer = telephony.isDefaultDialer(),
-                simCards = sims,
-                brilliantStatus = brilliant
-            )
+        viewModelScope.launch(Dispatchers.IO) {
+            coroutineScope {
+                val simsDeferred = async { telephony.loadSimCards(prefs) }
+                val brilliantDeferred = async { telephony.inspectBrilliantBridge(prefs.brilliantPackageName) }
+                systemSnapshot.value = systemSnapshot.value.copy(
+                    permissions = currentPermissions(),
+                    isDefaultDialer = telephony.isDefaultDialer(),
+                    simCards = simsDeferred.await(),
+                    brilliantStatus = brilliantDeferred.await()
+                )
+            }
         }
     }
 
@@ -593,6 +641,8 @@ class DialerViewModel(
     fun openAppInfoSettings() = telephony.openAppInfoSettings()
 
     fun openSystemDefaultAppsSettings() = telephony.openSystemDefaultAppsSettings()
+
+    fun openCallingAccountsSettings() = telephony.openCallingAccountsSettings()
 
     fun openSettings() {
         isSettingsOpen.value = true
@@ -880,6 +930,24 @@ class DialerViewModel(
         repository.updateBrilliantExternalHandoff(enabled)
     }
 
+    fun updateBrilliantAccount(name: String, number: String) = viewModelScope.launch {
+        repository.updateBrilliantAccount(name, number)
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(
+            if (isBn) "ব্রিলিয়ান্ট অ্যাকাউন্ট সেভ হয়েছে"
+            else "Brilliant account saved"
+        )
+    }
+
+    fun updateBrilliantLinkedAccountId(accountId: String) = viewModelScope.launch {
+        repository.updateBrilliantLinkedAccountId(accountId)
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(
+            if (isBn) "ব্রিলিয়ান্ট কলিং অ্যাকাউন্ট লিংক হয়েছে"
+            else "Brilliant calling account linked"
+        )
+    }
+
     fun updateDefaultRoute(route: DefaultRoutePreference) = viewModelScope.launch {
         repository.updateDefaultRoute(route)
     }
@@ -908,6 +976,10 @@ class DialerViewModel(
 
     fun updateDarkTheme(enabled: Boolean) = viewModelScope.launch {
         repository.updateDarkTheme(enabled)
+    }
+
+    fun updateThemePalette(palette: AppThemePalette) = viewModelScope.launch {
+        repository.updateThemePalette(palette)
     }
 
     fun updateLanguage(language: AppLanguage) = viewModelScope.launch {
@@ -987,33 +1059,65 @@ class DialerViewModel(
         callNotes: List<CallNoteEntity>,
         hiddenIds: Set<String>
     ): List<CallLogItem> {
+        // O(1) indexed lookup maps for instant, lag-free merging even with 5,000+ contacts
+        val contactsByExact = HashMap<String, DeviceContact>(contacts.size * 2)
+        val contactsByTail = HashMap<String, DeviceContact>(contacts.size * 2)
+        for (c in contacts) {
+            if (c.normalizedNumber.isNotEmpty()) {
+                contactsByExact.putIfAbsent(c.normalizedNumber, c)
+                if (c.normalizedNumber.length >= 8) {
+                    contactsByTail.putIfAbsent(c.normalizedNumber.takeLast(10), c)
+                }
+            }
+        }
+        val notesByExact = HashMap<String, String>(callNotes.size * 2)
+        val notesByTail = HashMap<String, String>(callNotes.size * 2)
+        for (n in callNotes) {
+            if (n.contactName.isNotBlank() && n.normalizedNumber.isNotEmpty()) {
+                notesByExact.putIfAbsent(n.normalizedNumber, n.contactName)
+                if (n.normalizedNumber.length >= 8) {
+                    notesByTail.putIfAbsent(n.normalizedNumber.takeLast(10), n.contactName)
+                }
+            }
+        }
+
+        fun lookupContactFast(norm: String): DeviceContact? {
+            if (norm.length < 4) return null
+            return contactsByExact[norm]
+                ?: if (norm.length >= 8) contactsByTail[norm.takeLast(10)] else null
+        }
+
+        fun lookupNoteFast(norm: String): String? {
+            if (norm.length < 4) return null
+            return notesByExact[norm]
+                ?: if (norm.length >= 8) notesByTail[norm.takeLast(10)] else null
+        }
+
         val enrichedSystemLogs = systemLogs
             .filterNot { it.id in hiddenIds }
             .map { sys ->
-                val matchedContact = resolveContact(sys.number, contacts)
+                val matchedContact = lookupContactFast(sys.normalizedNumber)
                 val resolvedName = sys.contactName?.takeIf { it.isNotBlank() }
                     ?: matchedContact?.name
-                    ?: resolveLocalTagName(sys.number, callNotes)
+                    ?: lookupNoteFast(sys.normalizedNumber)
                     ?: CallerIdIntelligence.detectOffline(sys.number)?.displayName
                 val resolvedPhoto = sys.photoUri?.takeIf { it.isNotBlank() }
                     ?: matchedContact?.photoUri
-                sys.copy(
-                    contactName = resolvedName,
-                    photoUri = resolvedPhoto
-                )
+                if (resolvedName == sys.contactName && resolvedPhoto == sys.photoUri) sys
+                else sys.copy(contactName = resolvedName, photoUri = resolvedPhoto)
             }
 
         val localMapped = localRecords
             .map { rec ->
                 val route = runCatching { CallRoute.valueOf(rec.route) }.getOrDefault(CallRoute.SIM_1)
-                val matchedContact = resolveContact(rec.number, contacts)
+                val matchedContact = lookupContactFast(rec.normalizedNumber)
                 CallLogItem(
                     id = "local_${rec.id}",
                     number = rec.number,
                     normalizedNumber = rec.normalizedNumber,
                     contactName = rec.contactName?.takeIf { it.isNotBlank() }
                         ?: matchedContact?.name
-                        ?: resolveLocalTagName(rec.number, callNotes)
+                        ?: lookupNoteFast(rec.normalizedNumber)
                         ?: CallerIdIntelligence.detectOffline(rec.number)?.displayName,
                     photoUri = matchedContact?.photoUri,
                     direction = CallDirection.OUTGOING,
@@ -1034,7 +1138,7 @@ class DialerViewModel(
         }
         return (filteredLocal + enrichedSystemLogs)
             .sortedByDescending { it.timestamp }
-            .take(150)
+            .take(120)
     }
 
     private fun filterCallLogs(filter: CallFilterType, logs: List<CallLogItem>): List<CallLogItem> {
@@ -1061,9 +1165,18 @@ class DialerViewModel(
     private fun computeT9Matches(dialed: String, contacts: List<DeviceContact>): List<DeviceContact> {
         val digits = dialed.filter { it.isDigit() }
         if (digits.length < 2) return emptyList()
-        return contacts.filter { contact ->
-            contact.normalizedNumber.contains(digits) || nameToT9(contact.name).contains(digits)
-        }.take(6)
+        if (cachedT9ContactsRef !== contacts) {
+            cachedT9Index = contacts.map { it to nameToT9(it.name) }
+            cachedT9ContactsRef = contacts
+        }
+        val matches = ArrayList<DeviceContact>(6)
+        for ((contact, t9) in cachedT9Index) {
+            if (contact.normalizedNumber.contains(digits) || t9.contains(digits)) {
+                matches.add(contact)
+                if (matches.size >= 6) break
+            }
+        }
+        return matches
     }
 
     private fun nameToT9(name: String): String {
@@ -1094,7 +1207,6 @@ class DialerViewModel(
             enableCloudCallerId: Boolean = true
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                CallNotificationHelper.ensureChannels(application)
                 val callerIdRepo = if (enableCloudCallerId && FirebaseApp.getApps(application).isNotEmpty()) {
                     runCatching {
                         val databaseId = application.getString(R.string.firestore_database_id)
@@ -1114,7 +1226,11 @@ class DialerViewModel(
                     callerIdRepository = callerIdRepo,
                     currentUserId = currentUserId,
                     userDisplayNameHint = userDisplayNameHint
-                )
+                ).also { vm ->
+                    vm.viewModelScope.launch(Dispatchers.IO) {
+                        CallNotificationHelper.ensureChannels(application)
+                    }
+                }
             }
         }
     }

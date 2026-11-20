@@ -33,14 +33,17 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -88,6 +91,8 @@ fun RecentsScreen(
     strings: NovaStrings,
     onSelectFilter: (CallFilterType) -> Unit,
     onRefresh: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenKeypad: () -> Unit,
     onRequestPermissions: () -> Unit,
     onCallRoute: (String, CallRoute, String?) -> Unit,
     onOpenCallerDetail: (String, String?) -> Unit,
@@ -125,7 +130,7 @@ fun RecentsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = strings.tabRecents,
                         style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
@@ -137,15 +142,30 @@ fun RecentsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(
-                    onClick = onRefresh,
-                    modifier = Modifier.testTag("refresh_recents_button")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = "Refresh",
-                        tint = nova.gold
-                    )
+                    IconButton(
+                        onClick = onRefresh,
+                        modifier = Modifier.testTag("refresh_recents_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Refresh",
+                            tint = nova.gold
+                        )
+                    }
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.testTag("recents_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = if (isBn) "সেটিংস" else "Settings",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
                 }
             }
 
@@ -256,9 +276,13 @@ fun RecentsScreen(
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 18.dp)
+                    contentPadding = PaddingValues(bottom = 86.dp)
                 ) {
-                    items(state.filteredCallLogs, key = { it.id }) { item ->
+                    items(
+                        items = state.filteredCallLogs,
+                        key = { it.id },
+                        contentType = { "call_log_item" }
+                    ) { item ->
                         val isBlocked = blockedSet.contains(item.normalizedNumber)
                         val note = notesMap[item.normalizedNumber]
                         val dismissState = rememberSwipeToDismissBoxState(
@@ -366,6 +390,23 @@ fun RecentsScreen(
                     }
                 }
             }
+        }
+
+        FloatingActionButton(
+            onClick = onOpenKeypad,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 18.dp, bottom = 18.dp)
+                .testTag("recents_dialpad_fab"),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Dialpad,
+                contentDescription = strings.tabKeypad,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }

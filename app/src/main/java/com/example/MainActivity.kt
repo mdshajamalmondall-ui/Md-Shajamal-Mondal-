@@ -36,8 +36,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isFirebaseInitialized = remember {
-                FirebaseApp.getApps(this@MainActivity).isNotEmpty() ||
-                    runCatching { FirebaseApp.initializeApp(this@MainActivity) != null }.getOrDefault(false)
+                FirebaseApp.getApps(this@MainActivity).isNotEmpty()
             }
 
             if (isFirebaseInitialized) {

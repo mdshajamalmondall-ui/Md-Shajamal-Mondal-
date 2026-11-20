@@ -24,6 +24,7 @@ import com.example.data.model.CallDirection
 import com.example.data.model.CallDispatchResult
 import com.example.data.model.CallLogItem
 import com.example.data.model.CallRoute
+import com.example.data.model.CallingAccountOption
 import com.example.data.model.DeviceContact
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SimCardInfo
@@ -93,6 +94,14 @@ class TelephonyBridgeManager(private val context: Context) {
         }
         runCatching { context.startActivity(intent) }
             .onFailure { openAppInfoSettings() }
+    }
+
+    fun openCallingAccountsSettings() {
+        val intent = Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(intent) }
+            .onFailure { openSystemDefaultAppsSettings() }
     }
 
     fun playDialpadSound(symbol: String, style: KeypadSoundStyle, volume: Float) {
@@ -219,20 +228,32 @@ class TelephonyBridgeManager(private val context: Context) {
         }
 
         var telecomLabel: String? = null
+        val availableAccounts = mutableListOf<CallingAccountOption>()
         if (hasPermission(Manifest.permission.READ_PHONE_STATE)) {
             val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
             val handles = runCatching { telecomManager?.callCapablePhoneAccounts ?: emptyList() }
                 .getOrDefault(emptyList())
-            val brilliantHandle = handles.firstOrNull { handle ->
-                val pkgMatch = handle.componentName.packageName.contains("brilliant", ignoreCase = true) ||
-                    (installedPkg != null && handle.componentName.packageName == installedPkg)
-                val label = runCatching { telecomManager?.getPhoneAccount(handle)?.label?.toString() }.getOrNull()
-                pkgMatch || (label?.contains("brilliant", ignoreCase = true) == true)
-            }
-            if (brilliantHandle != null) {
-                telecomLabel = runCatching {
-                    telecomManager?.getPhoneAccount(brilliantHandle)?.label?.toString()
-                }.getOrNull() ?: "Brilliant VoIP"
+            handles.forEachIndexed { idx, handle ->
+                val account = runCatching { telecomManager?.getPhoneAccount(handle) }.getOrNull()
+                val label = account?.label?.toString()?.takeIf { it.isNotBlank() } ?: "Account ${idx + 1}"
+                val pkg = handle.componentName.packageName
+                val isBrilliantOrVoip = pkg.contains("brilliant", ignoreCase = true) ||
+                    (installedPkg != null && pkg == installedPkg) ||
+                    label.contains("brilliant", ignoreCase = true) ||
+                    pkg.contains("sip", ignoreCase = true) ||
+                    label.contains("sip", ignoreCase = true) ||
+                    label.contains("voip", ignoreCase = true)
+                availableAccounts.add(
+                    CallingAccountOption(
+                        id = handle.id,
+                        label = label,
+                        packageName = pkg,
+                        isVoipOrBrilliant = isBrilliantOrVoip
+                    )
+                )
+                if (telecomLabel == null && isBrilliantOrVoip) {
+                    telecomLabel = label
+                }
             }
         }
 
@@ -241,7 +262,8 @@ class TelephonyBridgeManager(private val context: Context) {
             packageName = installedPkg ?: preferredPackage.ifBlank { BrilliantBridgeStatus.DEFAULT_BRILLIANT_PACKAGE },
             appLabel = appLabel,
             hasTelecomVoipAccount = telecomLabel != null,
-            telecomAccountLabel = telecomLabel
+            telecomAccountLabel = telecomLabel,
+            availableCallingAccounts = availableAccounts
         )
     }
 
@@ -352,17 +374,28 @@ class TelephonyBridgeManager(private val context: Context) {
             copyToClipboard("Brilliant Call", formatted)
         }
 
-        // Priority 1: Telecom VoIP PhoneAccountHandle (keeps call 100% INSIDE NovaCall InCallActivity!)
+        val acctTag = prefs.brilliantAccountNumber.takeIf { it.isNotBlank() }
+            ?: prefs.brilliantAccountName.takeIf { it.isNotBlank() }
+
+        // Priority 1: Linked or Auto-Detected Telecom VoIP/Brilliant Calling Account (keeps call 100% INSIDE Shajamal!)
         if (hasPermission(Manifest.permission.CALL_PHONE)) {
             val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
             val handles = runCatching { telecomManager?.callCapablePhoneAccounts ?: emptyList() }
                 .getOrDefault(emptyList())
-            val brilliantHandle = handles.firstOrNull { handle ->
+
+            val linkedHandle = if (prefs.brilliantLinkedAccountId.isNotBlank()) {
+                handles.firstOrNull { it.id == prefs.brilliantLinkedAccountId }
+            } else null
+
+            val brilliantHandle = linkedHandle ?: handles.firstOrNull { handle ->
                 val pkgMatch = handle.componentName.packageName == targetPackage ||
-                    handle.componentName.packageName.contains("brilliant", ignoreCase = true)
+                    handle.componentName.packageName.contains("brilliant", ignoreCase = true) ||
+                    handle.componentName.packageName.contains("sip", ignoreCase = true)
                 val label = runCatching { telecomManager?.getPhoneAccount(handle)?.label?.toString() }.getOrNull()
-                pkgMatch || (label?.contains("brilliant", ignoreCase = true) == true)
+                pkgMatch || (label?.contains("brilliant", ignoreCase = true) == true) ||
+                    (label?.contains("voip", ignoreCase = true) == true)
             }
+
             if (telecomManager != null && brilliantHandle != null) {
                 val telUri = Uri.fromParts("tel", formatted, null)
                 val placed = runCatching {
@@ -373,17 +406,18 @@ class TelephonyBridgeManager(private val context: Context) {
                     true
                 }.getOrDefault(false)
                 if (placed) {
+                    val labelInfo = acctTag ?: bridgeStatus.telecomAccountLabel ?: "Brilliant VoIP"
                     return CallDispatchResult.Dispatched(
                         route = CallRoute.BRILLIANT,
                         formattedNumber = formatted,
-                        messageBn = "অ্যাপের ভেতর থেকেই ব্রিলিয়ান্ট VoIP কল যাচ্ছে...",
-                        messageEn = "Calling via Brilliant VoIP inside NovaCall..."
+                        messageBn = "অ্যাপের ভেতর থেকেই $labelInfo অ্যাকাউন্টে কল যাচ্ছে...",
+                        messageEn = "Calling via $labelInfo inside Shajamal..."
                     )
                 }
             }
         }
 
-        // Priority 2: Stay strictly inside NovaCall when external handoff is disabled (default!)
+        // Priority 2: Stay strictly inside Shajamal when external handoff is disabled (default!)
         if (!prefs.brilliantExternalHandoff) {
             if (hasPermission(Manifest.permission.CALL_PHONE)) {
                 val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
@@ -399,17 +433,18 @@ class TelephonyBridgeManager(private val context: Context) {
                 }.getOrDefault(false)
 
                 if (placedInApp) {
+                    val acctInfo = acctTag?.let { " ($it)" } ?: ""
                     return CallDispatchResult.Dispatched(
                         route = CallRoute.BRILLIANT,
                         formattedNumber = formatted,
-                        messageBn = "অ্যাপের ভেতর থেকেই কল যাচ্ছে ($formatted) • ব্রিলিয়ান্ট আলাদা খোলা হয়নি",
-                        messageEn = "Calling in-app ($formatted) without leaving NovaCall"
+                        messageBn = "অ্যাপের ভেতর থেকেই কল যাচ্ছে$acctInfo • বাইরের অ্যাপ খোলা হয়নি",
+                        messageEn = "Calling in-app$acctInfo without leaving Shajamal"
                     )
                 }
             }
             return CallDispatchResult.Error(
-                messageBn = "অ্যাপের ভেতর থেকে কল করতে NovaCall-কে ডিফল্ট ফোন অ্যাপ ও CALL পারমিশন দিন",
-                messageEn = "Set NovaCall as Default Phone App & grant CALL permission for in-app calling"
+                messageBn = "অ্যাপের ভেতর থেকে কল করতে Shajamal-কে ডিফল্ট ফোন অ্যাপ ও CALL পারমিশন দিন",
+                messageEn = "Set Shajamal as Default Phone App & grant CALL permission for in-app calling"
             )
         }
 

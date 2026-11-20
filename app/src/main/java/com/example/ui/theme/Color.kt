@@ -2,13 +2,53 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Royal Sapphire & Deep Ocean Palette (rich color, never flat black)
+// 1. Royal Sapphire & Deep Ocean Palette (Default Dark)
 val ObsidianBg = Color(0xFF0D1B3E)
 val ObsidianSurface = Color(0xFF132652)
 val ObsidianSurfaceElevated = Color(0xFF1B336B)
 val ObsidianSurfaceHighest = Color(0xFF244182)
 val ObsidianOutline = Color(0xFF355496)
 val ObsidianOutlineSubtle = Color(0xFF223B72)
+
+// 2. Emerald Forest Palette (Deep Rich Green)
+val EmeraldBg = Color(0xFF072620)
+val EmeraldSurface = Color(0xFF0C352D)
+val EmeraldSurfaceElevated = Color(0xFF13483D)
+val EmeraldSurfaceHighest = Color(0xFF1B5B4E)
+val EmeraldOutline = Color(0xFF2E7A69)
+val EmeraldOutlineSubtle = Color(0xFF195246)
+val EmeraldPrimary = Color(0xFF5EEAD4)
+val EmeraldPrimaryContainer = Color(0xFF11463B)
+
+// 3. Royal Amethyst Palette (Deep Velvet Purple)
+val AmethystBg = Color(0xFF1E1038)
+val AmethystSurface = Color(0xFF2A174D)
+val AmethystSurfaceElevated = Color(0xFF382066)
+val AmethystSurfaceHighest = Color(0xFF482B7F)
+val AmethystOutline = Color(0xFF6B47A8)
+val AmethystOutlineSubtle = Color(0xFF422773)
+val AmethystPrimary = Color(0xFFD8B4FE)
+val AmethystPrimaryContainer = Color(0xFF3E2270)
+
+// 4. Ocean Teal Palette (Deep Cyan Lagoon)
+val OceanBg = Color(0xFF072738)
+val OceanSurface = Color(0xFF0D364D)
+val OceanSurfaceElevated = Color(0xFF144865)
+val OceanSurfaceHighest = Color(0xFF1C5C7F)
+val OceanOutline = Color(0xFF2F7CA3)
+val OceanOutlineSubtle = Color(0xFF195270)
+val OceanPrimary = Color(0xFF5CE1E6)
+val OceanPrimaryContainer = Color(0xFF0F4459)
+
+// 5. Crimson Velvet Palette (Deep Burgundy Rose)
+val CrimsonBg = Color(0xFF2E0D1D)
+val CrimsonSurface = Color(0xFF401329)
+val CrimsonSurfaceElevated = Color(0xFF541A36)
+val CrimsonSurfaceHighest = Color(0xFF6B2446)
+val CrimsonOutline = Color(0xFF943B64)
+val CrimsonOutlineSubtle = Color(0xFF5E203E)
+val CrimsonPrimary = Color(0xFFFFB4A2)
+val CrimsonPrimaryContainer = Color(0xFF591D39)
 
 // Vibrant In-Call Screen Gradient Tokens
 val InCallGradTop = Color(0xFF0D3B54)
@@ -38,10 +78,10 @@ val WhatsAppGreen = Color(0xFF25D366)
 
 // Text Colors (Dark)
 val TextPrimaryDark = Color(0xFFF3F6FC)
-val TextSecondaryDark = Color(0xFF9AA5BD)
+val TextSecondaryDark = Color(0xFFA7B3CB)
 val TextMutedDark = Color(0xFF6B768F)
 
-// Daylight Pearl Light Palette
+// 6. Daylight Pearl Light Palette
 val PearlBg = Color(0xFFF6F7FB)
 val PearlSurface = Color(0xFFFFFFFF)
 val PearlSurfaceElevated = Color(0xFFEDF0F7)

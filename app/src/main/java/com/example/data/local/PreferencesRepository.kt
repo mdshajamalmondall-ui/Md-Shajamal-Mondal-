@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.model.AppLanguage
+import com.example.data.model.AppThemePalette
 import com.example.data.model.BrilliantBridgeStatus
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.DefaultRoutePreference
@@ -28,6 +29,9 @@ class PreferencesRepository(private val context: Context) {
         val BRILLIANT_AUTO_COPY = booleanPreferencesKey("brilliant_auto_copy")
         val BRILLIANT_SMART_PREFIXES = stringPreferencesKey("brilliant_smart_prefixes")
         val BRILLIANT_EXTERNAL_HANDOFF = booleanPreferencesKey("brilliant_external_handoff")
+        val BRILLIANT_ACCOUNT_NAME = stringPreferencesKey("brilliant_account_name")
+        val BRILLIANT_ACCOUNT_NUMBER = stringPreferencesKey("brilliant_account_number")
+        val BRILLIANT_LINKED_ACCOUNT_ID = stringPreferencesKey("brilliant_linked_account_id")
         val DEFAULT_ROUTE = stringPreferencesKey("default_route")
         val SIM1_ALIAS = stringPreferencesKey("sim1_alias")
         val SIM2_ALIAS = stringPreferencesKey("sim2_alias")
@@ -36,6 +40,7 @@ class PreferencesRepository(private val context: Context) {
         val KEYPAD_SOUND_VOLUME = floatPreferencesKey("keypad_sound_volume")
         val HAPTIC = booleanPreferencesKey("haptic")
         val DARK_THEME = booleanPreferencesKey("dark_theme")
+        val THEME_PALETTE = stringPreferencesKey("theme_palette")
         val LANGUAGE = stringPreferencesKey("language")
         val NOTIFY_INCOMING = booleanPreferencesKey("notify_incoming")
         val NOTIFY_MISSED = booleanPreferencesKey("notify_missed")
@@ -65,6 +70,9 @@ class PreferencesRepository(private val context: Context) {
             brilliantAutoCopyClipboard = prefs[Keys.BRILLIANT_AUTO_COPY] ?: true,
             brilliantSmartPrefixes = prefs[Keys.BRILLIANT_SMART_PREFIXES] ?: "+,00",
             brilliantExternalHandoff = prefs[Keys.BRILLIANT_EXTERNAL_HANDOFF] ?: false,
+            brilliantAccountName = prefs[Keys.BRILLIANT_ACCOUNT_NAME] ?: "",
+            brilliantAccountNumber = prefs[Keys.BRILLIANT_ACCOUNT_NUMBER] ?: "",
+            brilliantLinkedAccountId = prefs[Keys.BRILLIANT_LINKED_ACCOUNT_ID] ?: "",
             defaultRoute = prefs[Keys.DEFAULT_ROUTE]
                 ?.let { runCatching { DefaultRoutePreference.valueOf(it) }.getOrNull() }
                 ?: DefaultRoutePreference.ASK,
@@ -76,7 +84,15 @@ class PreferencesRepository(private val context: Context) {
                 ?: KeypadSoundStyle.DTMF_CLASSIC,
             keypadSoundVolume = (prefs[Keys.KEYPAD_SOUND_VOLUME] ?: 0.9f).coerceIn(0.2f, 1.0f),
             hapticEnabled = prefs[Keys.HAPTIC] ?: true,
-            darkThemeEnabled = prefs[Keys.DARK_THEME] ?: true,
+            darkThemeEnabled = run {
+                val savedPalette = prefs[Keys.THEME_PALETTE]
+                    ?.let { runCatching { AppThemePalette.valueOf(it) }.getOrNull() }
+                if (savedPalette != null) savedPalette != AppThemePalette.PEARL_WHITE
+                else prefs[Keys.DARK_THEME] ?: true
+            },
+            themePalette = prefs[Keys.THEME_PALETTE]
+                ?.let { runCatching { AppThemePalette.valueOf(it) }.getOrNull() }
+                ?: if (prefs[Keys.DARK_THEME] == false) AppThemePalette.PEARL_WHITE else AppThemePalette.ROYAL_SAPPHIRE,
             language = prefs[Keys.LANGUAGE]
                 ?.let { runCatching { AppLanguage.valueOf(it) }.getOrNull() }
                 ?: AppLanguage.BENGALI,
@@ -114,6 +130,17 @@ class PreferencesRepository(private val context: Context) {
         context.novaDataStore.edit { it[Keys.BRILLIANT_EXTERNAL_HANDOFF] = enabled }
     }
 
+    suspend fun updateBrilliantAccount(name: String, number: String) {
+        context.novaDataStore.edit {
+            it[Keys.BRILLIANT_ACCOUNT_NAME] = name.trim()
+            it[Keys.BRILLIANT_ACCOUNT_NUMBER] = number.trim()
+        }
+    }
+
+    suspend fun updateBrilliantLinkedAccountId(accountId: String) {
+        context.novaDataStore.edit { it[Keys.BRILLIANT_LINKED_ACCOUNT_ID] = accountId.trim() }
+    }
+
     suspend fun updateDefaultRoute(route: DefaultRoutePreference) {
         context.novaDataStore.edit { it[Keys.DEFAULT_ROUTE] = route.name }
     }
@@ -142,7 +169,17 @@ class PreferencesRepository(private val context: Context) {
     }
 
     suspend fun updateDarkTheme(enabled: Boolean) {
-        context.novaDataStore.edit { it[Keys.DARK_THEME] = enabled }
+        context.novaDataStore.edit {
+            it[Keys.DARK_THEME] = enabled
+            it[Keys.THEME_PALETTE] = if (enabled) AppThemePalette.ROYAL_SAPPHIRE.name else AppThemePalette.PEARL_WHITE.name
+        }
+    }
+
+    suspend fun updateThemePalette(palette: AppThemePalette) {
+        context.novaDataStore.edit {
+            it[Keys.THEME_PALETTE] = palette.name
+            it[Keys.DARK_THEME] = palette != AppThemePalette.PEARL_WHITE
+        }
     }
 
     suspend fun updateLanguage(language: AppLanguage) {

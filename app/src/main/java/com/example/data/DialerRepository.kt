@@ -7,6 +7,7 @@ import com.example.data.local.NovaCallDao
 import com.example.data.local.PreferencesRepository
 import com.example.data.local.SpeedDialEntity
 import com.example.data.model.AppLanguage
+import com.example.data.model.AppThemePalette
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
@@ -97,6 +98,8 @@ class DialerRepository(
     suspend fun updateBrilliantAutoCopy(enabled: Boolean) = preferencesRepository.updateBrilliantAutoCopy(enabled)
     suspend fun updateBrilliantSmartPrefixes(prefixes: String) = preferencesRepository.updateBrilliantSmartPrefixes(prefixes)
     suspend fun updateBrilliantExternalHandoff(enabled: Boolean) = preferencesRepository.updateBrilliantExternalHandoff(enabled)
+    suspend fun updateBrilliantAccount(name: String, number: String) = preferencesRepository.updateBrilliantAccount(name, number)
+    suspend fun updateBrilliantLinkedAccountId(accountId: String) = preferencesRepository.updateBrilliantLinkedAccountId(accountId)
     suspend fun updateDefaultRoute(route: DefaultRoutePreference) = preferencesRepository.updateDefaultRoute(route)
     suspend fun updateSimAlias(slotIndex: Int, alias: String) = preferencesRepository.updateSimAlias(slotIndex, alias)
     suspend fun updateDtmfSound(enabled: Boolean) = preferencesRepository.updateDtmfSound(enabled)
@@ -104,6 +107,7 @@ class DialerRepository(
     suspend fun updateKeypadSoundVolume(volume: Float) = preferencesRepository.updateKeypadSoundVolume(volume)
     suspend fun updateHaptic(enabled: Boolean) = preferencesRepository.updateHaptic(enabled)
     suspend fun updateDarkTheme(enabled: Boolean) = preferencesRepository.updateDarkTheme(enabled)
+    suspend fun updateThemePalette(palette: AppThemePalette) = preferencesRepository.updateThemePalette(palette)
     suspend fun updateLanguage(language: AppLanguage) = preferencesRepository.updateLanguage(language)
     suspend fun updateNotifyIncoming(enabled: Boolean) = preferencesRepository.updateNotifyIncoming(enabled)
     suspend fun updateNotifyMissed(enabled: Boolean) = preferencesRepository.updateNotifyMissed(enabled)

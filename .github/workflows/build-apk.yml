@@ -92,11 +92,12 @@ jobs:
           RELEASE_NOTES="Tap Shajamal.apk below to download and install directly on your Android phone.
 
           Latest updates:
-          - Contact photos in Recents & Caller Details
-          - Recents swipe right to call, swipe left to delete, long-press for call options
-          - Compact T9 dialpad
-          - Unknown Caller ID lookup (Verified BD services + Local/Community Caller ID)
-          - In-call Recording (with Settings audio player), Hold & Speakerphone"
+          - Ultra-fast startup & smooth background loading (parallel call logs, contacts & SIM loading)
+          - App now opens directly on the Recents tab with quick Settings button & Dialpad FAB
+          - Brilliant Account setup (save Brilliant number/name, link Android Calling Accounts, stay strictly in-app)
+          - 6 rich app background color themes (Royal Sapphire, Emerald Forest, Royal Amethyst, Ocean Teal, Crimson Velvet, Pearl White)
+          - Contact photos in Recents, swipe right to call, swipe left to delete, long-press for call options
+          - Compact T9 dialpad, Unknown Caller ID lookup & In-call Recording (with Settings player)"
 
           if gh release view latest-apk >/dev/null 2>&1; then
             gh release upload latest-apk Shajamal.apk --clobber

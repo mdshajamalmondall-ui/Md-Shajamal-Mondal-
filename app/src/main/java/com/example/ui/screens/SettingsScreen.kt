@@ -76,9 +76,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.AppLanguage
+import com.example.data.model.AppThemePalette
 import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.telephony.CallRecorderManager
+import com.example.ui.components.ThemePalettePicker
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
 import com.example.ui.viewmodel.DialerUiState
@@ -116,6 +118,7 @@ fun SettingsScreen(
     onAddQuickReply: (String) -> Unit,
     onRemoveQuickReply: (String) -> Unit,
     onToggleDarkTheme: (Boolean) -> Unit,
+    onSelectThemePalette: (AppThemePalette) -> Unit,
     onToggleLanguage: (AppLanguage) -> Unit,
     signedInEmail: String?,
     onToggleCloudCallerId: (Boolean) -> Unit,
@@ -906,6 +909,15 @@ fun SettingsScreen(
                         icon = Icons.Filled.Tune,
                         iconTint = nova.gold
                     ) {
+                        ThemePalettePicker(
+                            selectedPalette = state.preferences.themePalette,
+                            language = state.preferences.language,
+                            onSelectPalette = onSelectThemePalette
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = nova.glassBorder.copy(alpha = 0.5f)
+                        )
                         SettingsSwitchRow(
                             title = strings.darkModeLabel,
                             subtitle = null,
