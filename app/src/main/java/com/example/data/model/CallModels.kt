@@ -1,6 +1,7 @@
 package com.example.data.model
 
 import android.telecom.PhoneAccountHandle
+import androidx.compose.runtime.Immutable
 
 enum class CallRoute {
     SIM_1,
@@ -88,6 +89,7 @@ data class CallingAccountOption(
     val isVoipOrBrilliant: Boolean
 )
 
+@Immutable
 data class SimCardInfo(
     val slotIndex: Int,
     val subscriptionId: Int,
@@ -115,6 +117,7 @@ data class BrilliantBridgeStatus(
     }
 }
 
+@Immutable
 data class DeviceContact(
     val id: String,
     val name: String,
@@ -124,6 +127,7 @@ data class DeviceContact(
     val isStarred: Boolean = false
 )
 
+@Immutable
 data class CallLogItem(
     val id: String,
     val number: String,
@@ -137,6 +141,7 @@ data class CallLogItem(
     val isLocalNovaRecord: Boolean = false
 )
 
+@Immutable
 data class UserPreferences(
     val brilliantPackageName: String = BrilliantBridgeStatus.DEFAULT_BRILLIANT_PACKAGE,
     val brilliantLaunchMode: BrilliantLaunchMode = BrilliantLaunchMode.SMART_AUTO,

@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -76,6 +77,7 @@ enum class NovaTab {
     KEYPAD
 }
 
+@Immutable
 data class PermissionSnapshot(
     val hasCallPhone: Boolean = false,
     val hasReadPhoneState: Boolean = false,
@@ -87,12 +89,14 @@ data class PermissionSnapshot(
         get() = hasCallPhone && hasReadPhoneState && hasReadContacts && hasReadCallLog
 }
 
+@Immutable
 data class CallerDetailTarget(
     val number: String,
     val normalizedNumber: String,
     val name: String?
 )
 
+@Immutable
 data class CloudCallerIdSnapshot(
     val profile: UserCloudProfile? = null,
     val myTags: List<CallerDirectoryEntry> = emptyList(),
@@ -102,6 +106,7 @@ data class CloudCallerIdSnapshot(
     val errorMessage: String? = null
 )
 
+@Immutable
 data class DialerUiState(
     val activeTab: NovaTab = NovaTab.RECENTS,
     val isSettingsOpen: Boolean = false,
@@ -174,7 +179,7 @@ private data class UiInputSnapshot(
 class DialerViewModel(
     private val repository: DialerRepository,
     private val telephony: TelephonyBridgeManager,
-    private val callerIdRepository: CallerIdRepository?,
+    private val callerIdRepoFactory: () -> CallerIdRepository?,
     private val currentUserId: String,
     private val userDisplayNameHint: String
 ) : ViewModel() {
@@ -188,6 +193,10 @@ class DialerViewModel(
     private val selectedCallerDetail = MutableStateFlow<CallerDetailTarget?>(null)
     private val routePickerTarget = MutableStateFlow<CallerDetailTarget?>(null)
 
+    @Volatile
+    private var callerIdRepository: CallerIdRepository? = null
+    private val cloudProfileFlow = MutableStateFlow<UserCloudProfile?>(null)
+    private val myTagsFlow = MutableStateFlow<List<CallerDirectoryEntry>>(emptyList())
     private val dialedLookupResult = MutableStateFlow<CallerIdLookupResult?>(null)
     private val isLookingUpCallerId = MutableStateFlow(false)
     private val isSyncingCommunityContacts = MutableStateFlow(false)
@@ -196,14 +205,25 @@ class DialerViewModel(
     private var lookupJob: Job? = null
     private var refreshJob: Job? = null
     private var lastSystemRefreshMs: Long = 0L
-    @Volatile
-    private var cachedT9Index: List<Pair<DeviceContact, String>> = emptyList()
-    @Volatile
-    private var cachedT9ContactsRef: List<DeviceContact>? = null
+
+    // Reference-based memoization caches so tab switches / typing / sheet toggles do ZERO list recomputation
+    @Volatile private var cachedT9Index: List<Pair<DeviceContact, String>> = emptyList()
+    @Volatile private var cachedT9ContactsRef: List<DeviceContact>? = null
+    @Volatile private var lastMergedKey: Any? = null
+    @Volatile private var lastMergedLogs: List<CallLogItem> = emptyList()
+    @Volatile private var lastTodayCount: Int = 0
+    @Volatile private var lastFavKey: Any? = null
+    @Volatile private var lastFavorites: List<DeviceContact> = emptyList()
+    @Volatile private var lastFilteredContactsKey: Any? = null
+    @Volatile private var lastFilteredContacts: List<DeviceContact> = emptyList()
+    @Volatile private var lastFilteredLogsKey: Any? = null
+    @Volatile private var lastFilteredLogs: List<CallLogItem> = emptyList()
+
+    private val initialPerms: PermissionSnapshot = currentPermissions()
 
     private val systemSnapshot = MutableStateFlow(
         SystemDataSnapshot(
-            permissions = PermissionSnapshot(),
+            permissions = initialPerms,
             isDefaultDialer = false,
             simCards = emptyList(),
             contacts = emptyList(),
@@ -214,41 +234,6 @@ class DialerViewModel(
 
     private val _events = MutableSharedFlow<DialerUiEvent>(extraBufferCapacity = 8)
     val events: SharedFlow<DialerUiEvent> = _events.asSharedFlow()
-
-    private val cloudProfileFlow: StateFlow<UserCloudProfile?> = (
-        if (callerIdRepository != null && currentUserId.isNotBlank()) {
-            callerIdRepository.observeUserProfile(currentUserId)
-        } else {
-            flowOf(null)
-        }
-        )
-        .catch { error ->
-            val firestoreError = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (firestoreError == null && error is CancellationException) throw error
-            Log.w(TAG, "Error observing user cloud profile", firestoreError ?: error)
-            cloudErrorMessage.value = (firestoreError ?: error).localizedMessage
-            emit(null)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
-
-    private val myTagsFlow: StateFlow<List<CallerDirectoryEntry>> = (
-        if (callerIdRepository != null && currentUserId.isNotBlank()) {
-            callerIdRepository.observeMyContributedTags(currentUserId)
-        } else {
-            flowOf(emptyList())
-        }
-        )
-        .catch { error ->
-            val firestoreError = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (firestoreError == null && error is CancellationException) throw error
-            Log.w(TAG, "Error observing contributed caller tags", firestoreError ?: error)
-            emit(emptyList())
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), emptyList())
 
     private val cloudSnapshotFlow = combine(
         cloudProfileFlow,
@@ -303,19 +288,63 @@ class DialerViewModel(
     ) { room, sysPair, input, cloud ->
         val sys = sysPair.first
         val hiddenIds = sysPair.second
-        val mergedLogs = mergeCallLogs(
-            systemLogs = sys.systemCallLogs,
-            localRecords = room.appCallRecords,
-            contacts = sys.contacts,
-            callNotes = room.callNotes,
-            hiddenIds = hiddenIds
-        )
+
+        // Memoized mergeCallLogs — only runs when logs/records/contacts/notes/hiddenIds actually change
+        val mergedKey = listOf(sys.systemCallLogs, room.appCallRecords, sys.contacts, room.callNotes, hiddenIds)
+        val mergedLogs = if (mergedKey == lastMergedKey) {
+            lastMergedLogs
+        } else {
+            val computed = mergeCallLogs(
+                systemLogs = sys.systemCallLogs,
+                localRecords = room.appCallRecords,
+                contacts = sys.contacts,
+                callNotes = room.callNotes,
+                hiddenIds = hiddenIds
+            )
+            val startOfDay = System.currentTimeMillis() - (24L * 60L * 60L * 1000L)
+            lastTodayCount = computed.count { it.timestamp >= startOfDay }
+            lastMergedLogs = computed
+            lastMergedKey = mergedKey
+            computed
+        }
+
         val normalizedDial = normalizePhoneNumber(input.dialedDigits)
-        val t9Matches = computeT9Matches(input.dialedDigits, sys.contacts)
-        val filteredContacts = filterContacts(input.contactSearchQuery, sys.contacts)
-        val filteredLogs = filterCallLogs(input.recentsFilter, input.recentsSearchQuery, mergedLogs)
-        val favSet = room.preferences.favoriteNumbers
-        val favorites = buildFavoritesList(sys.contacts, room.speedDials, favSet)
+        val t9Matches = if (input.dialedDigits.length >= 2) {
+            computeT9Matches(input.dialedDigits, sys.contacts)
+        } else {
+            emptyList()
+        }
+
+        val filteredContactsKey = Pair(input.contactSearchQuery, sys.contacts)
+        val filteredContacts = if (filteredContactsKey == lastFilteredContactsKey) {
+            lastFilteredContacts
+        } else {
+            filterContacts(input.contactSearchQuery, sys.contacts).also {
+                lastFilteredContacts = it
+                lastFilteredContactsKey = filteredContactsKey
+            }
+        }
+
+        val filteredLogsKey = Triple(input.recentsFilter, input.recentsSearchQuery, mergedLogs)
+        val filteredLogs = if (filteredLogsKey == lastFilteredLogsKey) {
+            lastFilteredLogs
+        } else {
+            filterCallLogs(input.recentsFilter, input.recentsSearchQuery, mergedLogs).also {
+                lastFilteredLogs = it
+                lastFilteredLogsKey = filteredLogsKey
+            }
+        }
+
+        val favKey = Triple(sys.contacts, room.speedDials, room.preferences.favoriteNumbers)
+        val favorites = if (favKey == lastFavKey) {
+            lastFavorites
+        } else {
+            buildFavoritesList(sys.contacts, room.speedDials, room.preferences.favoriteNumbers).also {
+                lastFavorites = it
+                lastFavKey = favKey
+            }
+        }
+
         val matchedNote = if (normalizedDial.length >= 4) {
             room.callNotes.firstOrNull {
                 it.normalizedNumber == normalizedDial ||
@@ -326,8 +355,6 @@ class DialerViewModel(
             it.normalizedNumber == normalizedDial ||
                 (normalizedDial.length >= 8 && it.normalizedNumber.endsWith(normalizedDial.takeLast(10)))
         }
-        val startOfDay = System.currentTimeMillis() - (24L * 60L * 60L * 1000L)
-        val todayCount = mergedLogs.count { it.timestamp >= startOfDay }
 
         DialerUiState(
             activeTab = input.activeTab,
@@ -351,7 +378,7 @@ class DialerViewModel(
             filteredCallLogs = filteredLogs,
             activeDialedNote = matchedNote,
             isDialedBlocked = isBlocked,
-            todayCallCount = todayCount,
+            todayCallCount = lastTodayCount,
             selectedCallerDetail = input.selectedCallerDetail,
             routePickerTarget = input.routePickerTarget,
             isLoadingSystemData = sys.isLoading,
@@ -362,14 +389,43 @@ class DialerViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = DialerUiState()
+            initialValue = DialerUiState(permissions = initialPerms)
         )
 
     init {
         refreshSystemData(force = true)
-        if (callerIdRepository != null && currentUserId.isNotBlank()) {
+        // Defer Firestore initialization off the main thread & after first frame so cold start is instantaneous
+        if (currentUserId.isNotBlank()) {
             viewModelScope.launch(Dispatchers.IO) {
-                callerIdRepository.ensureUserProfile(userDisplayNameHint)
+                delay(450L)
+                val repo = runCatching { callerIdRepoFactory() }.getOrNull() ?: return@launch
+                callerIdRepository = repo
+                launch {
+                    runCatching { repo.ensureUserProfile(userDisplayNameHint) }
+                }
+                launch {
+                    repo.observeUserProfile(currentUserId)
+                        .catch { error ->
+                            val firestoreError = generateSequence(error) { it.cause }
+                                .filterIsInstance<FirebaseFirestoreException>()
+                                .firstOrNull()
+                            if (firestoreError == null && error is CancellationException) throw error
+                            Log.w(TAG, "Error observing user cloud profile", firestoreError ?: error)
+                            cloudErrorMessage.value = (firestoreError ?: error).localizedMessage
+                        }
+                        .collect { cloudProfileFlow.value = it }
+                }
+                launch {
+                    repo.observeMyContributedTags(currentUserId)
+                        .catch { error ->
+                            val firestoreError = generateSequence(error) { it.cause }
+                                .filterIsInstance<FirebaseFirestoreException>()
+                                .firstOrNull()
+                            if (firestoreError == null && error is CancellationException) throw error
+                            Log.w(TAG, "Error observing contributed caller tags", firestoreError ?: error)
+                        }
+                        .collect { myTagsFlow.value = it }
+                }
             }
         }
         viewModelScope.launch {
@@ -1267,14 +1323,16 @@ class DialerViewModel(
             enableCloudCallerId: Boolean = true
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                val callerIdRepo = if (enableCloudCallerId && FirebaseApp.getApps(application).isNotEmpty()) {
-                    runCatching {
-                        val databaseId = application.getString(R.string.firestore_database_id)
-                        val firestore = FirebaseFirestore.getInstance(databaseId)
-                        CallerIdRepository(db = firestore)
-                    }.getOrNull()
-                } else {
-                    null
+                val callerIdRepoFactory: () -> CallerIdRepository? = {
+                    if (enableCloudCallerId && FirebaseApp.getApps(application).isNotEmpty()) {
+                        runCatching {
+                            val databaseId = application.getString(R.string.firestore_database_id)
+                            val firestore = FirebaseFirestore.getInstance(databaseId)
+                            CallerIdRepository(db = firestore)
+                        }.getOrNull()
+                    } else {
+                        null
+                    }
                 }
                 val roomDb = NovaCallDatabase.getInstance(application)
                 val prefsRepo = PreferencesRepository(application)
@@ -1283,7 +1341,7 @@ class DialerViewModel(
                 DialerViewModel(
                     repository = dialerRepo,
                     telephony = telephony,
-                    callerIdRepository = callerIdRepo,
+                    callerIdRepoFactory = callerIdRepoFactory,
                     currentUserId = currentUserId,
                     userDisplayNameHint = userDisplayNameHint
                 ).also { vm ->

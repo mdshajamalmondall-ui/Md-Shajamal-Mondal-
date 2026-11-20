@@ -691,16 +691,10 @@ private fun FloatingLiquidGlassNavBar(
     }
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = if (liquidGlassEnabled) 14.dp else 6.dp,
-                shape = RoundedCornerShape(34.dp),
-                ambientColor = Color.Black.copy(alpha = 0.25f),
-                spotColor = Color.Black.copy(alpha = 0.25f)
-            ),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(34.dp),
         color = pillColor,
+        shadowElevation = if (liquidGlassEnabled) 4.dp else 2.dp,
         border = BorderStroke(1.dp, borderColor)
     ) {
         Row(

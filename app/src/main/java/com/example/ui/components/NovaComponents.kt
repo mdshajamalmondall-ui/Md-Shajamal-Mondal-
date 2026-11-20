@@ -27,18 +27,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import com.example.data.model.AppLanguage
@@ -72,39 +74,42 @@ fun ContactAvatar(
 ) {
     val nova = LocalNovaColors.current
     val display = name?.trim().orEmpty()
-    val initials = display.split(" ")
-        .filter { it.isNotBlank() }
-        .take(2)
-        .joinToString("") { it.first().uppercase() }
-        .ifEmpty { "#" }
+    val initials = remember(display) {
+        display.split(" ")
+            .filter { it.isNotBlank() }
+            .take(2)
+            .joinToString("") { it.first().uppercase() }
+            .ifEmpty { "#" }
+    }
 
-    val palette = listOf(
-        nova.gold,
-        nova.sim1,
-        nova.sim2,
-        nova.brilliant,
-        Color(0xFFE07A5F)
-    )
-    val baseColor = accentOverride ?: palette[abs(display.hashCode()) % palette.size]
+    val baseColor = accentOverride ?: when (abs(display.hashCode()) % 5) {
+        0 -> nova.gold
+        1 -> nova.sim1
+        2 -> nova.sim2
+        3 -> nova.brilliant
+        else -> Color(0xFFE07A5F)
+    }
 
     Box(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        baseColor.copy(alpha = 0.28f),
-                        baseColor.copy(alpha = 0.12f)
-                    )
-                )
-            )
-            .border(1.dp, baseColor.copy(alpha = 0.45f), CircleShape),
+            .background(baseColor.copy(alpha = 0.20f))
+            .border(1.dp, baseColor.copy(alpha = 0.42f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         if (!photoUri.isNullOrBlank()) {
+            val context = LocalContext.current
+            val request = remember(photoUri, size) {
+                val px = (size.value * 2.5f).toInt().coerceIn(96, 256)
+                ImageRequest.Builder(context)
+                    .data(photoUri)
+                    .size(px, px)
+                    .crossfade(false)
+                    .build()
+            }
             AsyncImage(
-                model = photoUri,
+                model = request,
                 contentDescription = display.ifEmpty { "Avatar" },
                 modifier = Modifier
                     .size(size)

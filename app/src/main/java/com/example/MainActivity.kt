@@ -42,7 +42,6 @@ class MainActivity : ComponentActivity() {
             if (isFirebaseInitialized) {
                 val auth = Firebase.auth
                 val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
-                val credentialManager = remember { CredentialManager.create(this@MainActivity) }
                 val scope = rememberCoroutineScope()
 
                 val user = currentUser
@@ -75,7 +74,7 @@ class MainActivity : ComponentActivity() {
                             signedInEmail = user.email,
                             onSignOut = {
                                 signOutFromNovaCall(
-                                    credentialManager = credentialManager,
+                                    credentialManager = CredentialManager.create(this@MainActivity),
                                     scope = scope
                                 )
                             }

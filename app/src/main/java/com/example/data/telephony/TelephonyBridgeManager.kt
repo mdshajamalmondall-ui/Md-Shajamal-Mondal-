@@ -6,6 +6,7 @@ import android.app.role.RoleManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentProviderOperation
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -539,8 +540,8 @@ class TelephonyBridgeManager(private val context: Context) {
 
     suspend fun loadDeviceContacts(): List<DeviceContact> = withContext(Dispatchers.IO) {
         if (!hasPermission(Manifest.permission.READ_CONTACTS)) return@withContext emptyList()
-        val results = mutableListOf<DeviceContact>()
-        val seenKeys = mutableSetOf<String>()
+        val results = ArrayList<DeviceContact>(256)
+        val seenKeys = HashSet<String>(512)
 
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
@@ -554,7 +555,7 @@ class TelephonyBridgeManager(private val context: Context) {
             context.contentResolver.query(
                 ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                 projection,
-                null,
+                "${ContactsContract.CommonDataKinds.Phone.NUMBER} IS NOT NULL",
                 null,
                 "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY} ASC"
             )?.use { cursor ->
@@ -605,13 +606,22 @@ class TelephonyBridgeManager(private val context: Context) {
         )
 
         runCatching {
-            context.contentResolver.query(
-                CallLog.Calls.CONTENT_URI,
-                projection,
-                null,
-                null,
-                "${CallLog.Calls.DATE} DESC"
-            )?.use { cursor ->
+            val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val queryArgs = Bundle().apply {
+                    putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "${CallLog.Calls.DATE} DESC")
+                    putInt(ContentResolver.QUERY_ARG_LIMIT, 80)
+                }
+                context.contentResolver.query(CallLog.Calls.CONTENT_URI, projection, queryArgs, null)
+            } else {
+                context.contentResolver.query(
+                    CallLog.Calls.CONTENT_URI,
+                    projection,
+                    null,
+                    null,
+                    "${CallLog.Calls.DATE} DESC"
+                )
+            }
+            cursor?.use { cursor ->
                 val idIdx = cursor.getColumnIndex(CallLog.Calls._ID)
                 val numIdx = cursor.getColumnIndex(CallLog.Calls.NUMBER)
                 val nameIdx = cursor.getColumnIndex(CallLog.Calls.CACHED_NAME)

@@ -417,14 +417,6 @@ fun RecentsScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            if (!state.permissions.hasReadCallLog) {
-                PermissionAccessCard(
-                    strings = strings,
-                    onRequestPermissions = onRequestPermissions,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-            }
-
             if (state.filteredCallLogs.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -508,56 +500,56 @@ fun RecentsScreen(
                             enableDismissFromEndToStart = true,
                             backgroundContent = {
                                 val direction = dismissState.dismissDirection
-                                val bgColor = when (direction) {
-                                    SwipeToDismissBoxValue.StartToEnd -> nova.sim1
-                                    SwipeToDismissBoxValue.EndToStart -> nova.missed
-                                    else -> Color.Transparent
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(bgColor)
-                                        .padding(horizontal = 20.dp),
-                                    contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) {
-                                        Alignment.CenterStart
-                                    } else {
-                                        Alignment.CenterEnd
-                                    }
-                                ) {
-                                    if (direction == SwipeToDismissBoxValue.StartToEnd) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Call,
-                                                contentDescription = strings.call,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                            Text(
-                                                text = if (isBn) "কল করুন" else "Call",
-                                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                                color = Color.White
-                                            )
+                                if (direction == SwipeToDismissBoxValue.Settled) {
+                                    Box(modifier = Modifier.fillMaxSize())
+                                } else {
+                                    val bgColor = if (direction == SwipeToDismissBoxValue.StartToEnd) nova.sim1 else nova.missed
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(bgColor)
+                                            .padding(horizontal = 20.dp),
+                                        contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) {
+                                            Alignment.CenterStart
+                                        } else {
+                                            Alignment.CenterEnd
                                         }
-                                    } else if (direction == SwipeToDismissBoxValue.EndToStart) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Text(
-                                                text = if (isBn) "ডিলিট" else "Delete",
-                                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                                color = Color.White
-                                            )
-                                            Icon(
-                                                imageVector = Icons.Filled.Delete,
-                                                contentDescription = strings.delete,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(22.dp)
-                                            )
+                                    ) {
+                                        if (direction == SwipeToDismissBoxValue.StartToEnd) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Call,
+                                                    contentDescription = strings.call,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                                Text(
+                                                    text = if (isBn) "কল করুন" else "Call",
+                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color.White
+                                                )
+                                            }
+                                        } else {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isBn) "ডিলিট" else "Delete",
+                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color.White
+                                                )
+                                                Icon(
+                                                    imageVector = Icons.Filled.Delete,
+                                                    contentDescription = strings.delete,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -659,21 +651,19 @@ private fun CallLogCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AnimatedVisibility(visible = editMode) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onDeleteClick,
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.RemoveCircle,
-                                contentDescription = strings.delete,
-                                tint = nova.missed,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
+                if (editMode) {
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.RemoveCircle,
+                            contentDescription = strings.delete,
+                            tint = nova.missed,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
 
                 ContactAvatar(
@@ -724,15 +714,17 @@ private fun CallLogCard(
                             tint = dirColor,
                             modifier = Modifier.size(13.dp)
                         )
-                        val dur = formatCallDuration(item.durationSeconds, language)
-                        val timeStr = formatRelativeTime(item.timestamp, language)
-                        val subtitleParts = buildList {
-                            add(timeStr)
-                            if (dur.isNotEmpty()) add(dur)
-                            else if (!callerCarrierHint.isNullOrBlank()) add(callerCarrierHint)
+                        val subtitleText = remember(item.timestamp, item.durationSeconds, callerCarrierHint, language) {
+                            val dur = formatCallDuration(item.durationSeconds, language)
+                            val timeStr = formatRelativeTime(item.timestamp, language)
+                            when {
+                                dur.isNotEmpty() -> "$timeStr • $dur"
+                                !callerCarrierHint.isNullOrBlank() -> "$timeStr • $callerCarrierHint"
+                                else -> timeStr
+                            }
                         }
                         Text(
-                            text = subtitleParts.joinToString(" • "),
+                            text = subtitleText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,

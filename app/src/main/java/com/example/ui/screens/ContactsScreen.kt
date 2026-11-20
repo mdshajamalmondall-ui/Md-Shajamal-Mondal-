@@ -294,14 +294,6 @@ fun ContactsScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (!state.permissions.hasReadContacts) {
-                PermissionAccessCard(
-                    strings = strings,
-                    onRequestPermissions = onRequestPermissions,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-            }
-
             if (contactEntries.isEmpty()) {
                 Box(
                     modifier = Modifier
