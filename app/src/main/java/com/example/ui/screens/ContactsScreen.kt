@@ -25,12 +25,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -258,7 +258,7 @@ fun ContactsScreen(
                             contact = contact,
                             onOpenDetail = { onOpenCallerDetail(contact.phoneNumber, contact.name) },
                             onCallSim1 = { onCallRoute(contact.phoneNumber, CallRoute.SIM_1, contact.name) },
-                            onCallBrilliant = { onCallRoute(contact.phoneNumber, CallRoute.BRILLIANT, contact.name) }
+                            onCallSim2 = { onCallRoute(contact.phoneNumber, CallRoute.SIM_2, contact.name) }
                         )
                     }
                 }
@@ -322,8 +322,7 @@ private fun SpeedDialSlotCard(
                     RouteBadge(
                         route = route,
                         sim1Label = "S1",
-                        sim2Label = "S2",
-                        brilliantLabel = "Br"
+                        sim2Label = "S2"
                     )
                 } else {
                     Icon(
@@ -370,7 +369,7 @@ private fun ContactRowCard(
     contact: DeviceContact,
     onOpenDetail: () -> Unit,
     onCallSim1: () -> Unit,
-    onCallBrilliant: () -> Unit
+    onCallSim2: () -> Unit
 ) {
     val nova = LocalNovaColors.current
     Surface(
@@ -421,23 +420,6 @@ private fun ContactRowCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            // Instant Brilliant Connect call button
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(nova.brilliantContainer)
-                    .clickable(onClick = onCallBrilliant),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Bolt,
-                    contentDescription = "Brilliant Call",
-                    tint = nova.brilliant,
-                    modifier = Modifier.size(19.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
             // Instant SIM 1 call button
             Box(
                 modifier = Modifier
@@ -451,6 +433,23 @@ private fun ContactRowCard(
                     imageVector = Icons.Filled.Call,
                     contentDescription = "Call SIM 1",
                     tint = nova.sim1,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            // Instant SIM 2 call button
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(nova.sim2Container)
+                    .clickable(onClick = onCallSim2),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SimCard,
+                    contentDescription = "Call SIM 2",
+                    tint = nova.sim2,
                     modifier = Modifier.size(18.dp)
                 )
             }

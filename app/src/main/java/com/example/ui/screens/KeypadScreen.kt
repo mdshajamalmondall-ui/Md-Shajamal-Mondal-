@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.Message
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ContentCopy
@@ -72,7 +71,6 @@ import com.example.data.model.AppLanguage
 import com.example.data.model.CallRoute
 import com.example.data.model.DeviceContact
 import com.example.data.model.formatDisplayNumber
-import com.example.ui.components.BrilliantStatusPill
 import com.example.ui.components.ContactAvatar
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
@@ -121,7 +119,6 @@ fun KeypadScreen(
     onAddContact: (String) -> Unit,
     onCopyNumber: (String) -> Unit,
     onOpenNoteDialog: (String, String?) -> Unit,
-    onOpenBridgeTab: () -> Unit,
     onOpenSettings: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
     onOpenTagCaller: (String, String?) -> Unit,
@@ -141,7 +138,7 @@ fun KeypadScreen(
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                nova.brilliant.copy(alpha = 0.12f),
+                                nova.sim1.copy(alpha = 0.12f),
                                 Color.Transparent
                             ),
                             center = Offset(size.width * 0.85f, size.height * 0.08f),
@@ -194,33 +191,23 @@ fun KeypadScreen(
                             SimMiniDot(label = state.sim2.displayName, color = nova.sim2)
                         }
                     }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Surface(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onOpenSettings)
+                            .testTag("open_settings_button"),
+                        shape = CircleShape,
+                        color = nova.glassSurface,
+                        border = BorderStroke(1.dp, nova.glassBorder)
                     ) {
-                        BrilliantStatusPill(
-                            status = state.brilliantStatus,
-                            strings = strings,
-                            onClick = onOpenBridgeTab
-                        )
-                        Surface(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable(onClick = onOpenSettings)
-                                .testTag("open_settings_button"),
-                            shape = CircleShape,
-                            color = nova.glassSurface,
-                            border = BorderStroke(1.dp, nova.glassBorder)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Filled.Settings,
-                                    contentDescription = stringResource(R.string.cd_settings),
-                                    tint = nova.gold,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = stringResource(R.string.cd_settings),
+                                tint = nova.gold,
+                                modifier = Modifier.size(21.dp)
+                            )
                         }
                     }
                 }
@@ -318,34 +305,6 @@ fun KeypadScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                        }
-                    }
-                }
-
-                // Smart Brilliant Rate-Saver Tip
-                AnimatedVisibility(visible = state.suggestBrilliantForDialed, enter = fadeIn(), exit = fadeOut()) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp)
-                            .clickable {
-                                onCallRoute(state.dialedDigits, CallRoute.BRILLIANT, null)
-                            },
-                        shape = RoundedCornerShape(14.dp),
-                        color = nova.brilliantContainer,
-                        border = BorderStroke(1.dp, nova.brilliant.copy(alpha = 0.6f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Filled.Bolt, contentDescription = null, tint = nova.brilliant, modifier = Modifier.size(16.dp))
-                            Text(
-                                text = strings.smartSuggestedBrilliant,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
                         }
                     }
                 }
@@ -473,8 +432,8 @@ fun KeypadScreen(
                             T9MatchChip(
                                 contact = contact,
                                 onSelect = { onSelectT9Contact(contact) },
-                                onBrilliantCall = {
-                                    onCallRoute(contact.phoneNumber, CallRoute.BRILLIANT, contact.name)
+                                onQuickCall = {
+                                    onCallRoute(contact.phoneNumber, CallRoute.SIM_1, contact.name)
                                 }
                             )
                         }
@@ -580,7 +539,7 @@ fun KeypadScreen(
                         QuickUtilityChip(
                             icon = Icons.Filled.StickyNote2,
                             label = strings.addNote,
-                            tint = nova.brilliant,
+                            tint = nova.sim2,
                             tag = "quick_note_chip",
                             onClick = { onOpenNoteDialog(state.dialedDigits, state.t9Matches.firstOrNull()?.name) }
                         )
@@ -625,15 +584,11 @@ fun KeypadScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Signature Triple-Line Call Dock: SIM 1 | Brilliant Connect | SIM 2
-            TripleLineCallDock(
+            // Clean Dual-SIM Call Dock: SIM 1 & SIM 2
+            DualSimCallDock(
                 sim1Name = state.sim1.displayName,
                 sim2Name = state.sim2.displayName,
-                brilliantLabel = strings.brilliantShort,
-                brilliantInstalled = state.brilliantStatus.isInstalled,
-                highlightBrilliant = state.suggestBrilliantForDialed,
                 onCallSim1 = { onCallRoute(state.dialedDigits, CallRoute.SIM_1, null) },
-                onCallBrilliant = { onCallRoute(state.dialedDigits, CallRoute.BRILLIANT, null) },
                 onCallSim2 = { onCallRoute(state.dialedDigits, CallRoute.SIM_2, null) }
             )
 
@@ -668,7 +623,7 @@ private fun SimMiniDot(label: String, color: Color) {
 private fun T9MatchChip(
     contact: DeviceContact,
     onSelect: () -> Unit,
-    onBrilliantCall: () -> Unit
+    onQuickCall: () -> Unit
 ) {
     val nova = LocalNovaColors.current
     Surface(
@@ -703,16 +658,16 @@ private fun T9MatchChip(
             }
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(34.dp)
                     .clip(CircleShape)
-                    .background(nova.brilliantContainer)
-                    .clickable(onClick = onBrilliantCall),
+                    .background(nova.sim1Container)
+                    .clickable(onClick = onQuickCall),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Bolt,
-                    contentDescription = "Brilliant Call",
-                    tint = nova.brilliant,
+                    imageVector = Icons.Filled.Call,
+                    contentDescription = "Call SIM 1",
+                    tint = nova.sim1,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -837,173 +792,119 @@ private fun DialKeyButton(
 }
 
 @Composable
-private fun TripleLineCallDock(
+private fun DualSimCallDock(
     sim1Name: String,
     sim2Name: String,
-    brilliantLabel: String,
-    brilliantInstalled: Boolean,
-    highlightBrilliant: Boolean,
     onCallSim1: () -> Unit,
-    onCallBrilliant: () -> Unit,
     onCallSim2: () -> Unit
 ) {
     val nova = LocalNovaColors.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // SIM 1 Button
-        Surface(
+        // SIM 1 Hero Pill
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .height(52.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .height(54.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(nova.sim1, Color(0xFF00C853))
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.25f),
+                    shape = RoundedCornerShape(20.dp)
+                )
                 .clickable(onClick = onCallSim1)
                 .testTag("call_sim1_button"),
-            shape = RoundedCornerShape(18.dp),
-            color = nova.sim1Container,
-            border = BorderStroke(1.2.dp, nova.sim1.copy(alpha = 0.65f))
+            contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 6.dp),
+                    .padding(horizontal = 10.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Call,
                         contentDescription = stringResource(R.string.cd_call_sim1),
-                        tint = nova.sim1,
-                        modifier = Modifier.size(16.dp)
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
                     )
                     Text(
                         text = "SIM 1",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = nova.sim1
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
                     )
                 }
                 Text(
                     text = sim1Name,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.88f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
 
-        // Center Hero: Brilliant Connect VoIP Bridge Button
+        // SIM 2 Hero Pill
         Box(
             modifier = Modifier
-                .weight(1.25f)
-                .height(56.dp)
+                .weight(1f)
+                .height(54.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(
-                            nova.brilliantGlow,
-                            nova.brilliant,
-                            if (highlightBrilliant) nova.gold else nova.brilliant
-                        )
+                        colors = listOf(nova.sim2, Color(0xFF2979FF))
                     )
                 )
                 .border(
-                    width = if (highlightBrilliant) 2.dp else 1.2.dp,
-                    color = if (highlightBrilliant) nova.gold else Color.White.copy(alpha = 0.25f),
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.25f),
                     shape = RoundedCornerShape(20.dp)
                 )
-                .clickable(onClick = onCallBrilliant)
-                .testTag("call_brilliant_button"),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Bolt,
-                        contentDescription = stringResource(R.string.cd_call_brilliant),
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = brilliantLabel,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(if (brilliantInstalled) Color(0xFF69F0AE) else Color(0xFFFFD54F))
-                    )
-                    Text(
-                        text = if (brilliantInstalled) "VoIP Direct" else "Connect App",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = Color.White.copy(alpha = 0.88f)
-                    )
-                }
-            }
-        }
-
-        // SIM 2 Button
-        Surface(
-            modifier = Modifier
-                .weight(1f)
-                .height(52.dp)
-                .clip(RoundedCornerShape(18.dp))
                 .clickable(onClick = onCallSim2)
                 .testTag("call_sim2_button"),
-            shape = RoundedCornerShape(18.dp),
-            color = nova.sim2Container,
-            border = BorderStroke(1.2.dp, nova.sim2.copy(alpha = 0.65f))
+            contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 6.dp),
+                    .padding(horizontal = 10.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.SimCard,
                         contentDescription = stringResource(R.string.cd_call_sim2),
-                        tint = nova.sim2,
+                        tint = Color.White,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
                         text = "SIM 2",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = nova.sim2
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
                     )
                 }
                 Text(
                     text = sim2Name,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.88f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

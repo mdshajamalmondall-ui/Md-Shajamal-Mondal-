@@ -16,7 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material3.Button
@@ -40,11 +41,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Palette
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
-import com.example.data.model.BrilliantBridgeStatus
 import com.example.data.model.CallRoute
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.AmethystBg
@@ -129,14 +127,12 @@ fun RouteBadge(
     route: CallRoute,
     sim1Label: String = "SIM 1",
     sim2Label: String = "SIM 2",
-    brilliantLabel: String = "Brilliant",
     modifier: Modifier = Modifier
 ) {
     val nova = LocalNovaColors.current
     val (bg, fg, text, icon) = when (route) {
-        CallRoute.SIM_1 -> Quad(nova.sim1Container, nova.sim1, sim1Label.take(10), Icons.Filled.SimCard)
         CallRoute.SIM_2 -> Quad(nova.sim2Container, nova.sim2, sim2Label.take(10), Icons.Filled.SimCard)
-        CallRoute.BRILLIANT -> Quad(nova.brilliantContainer, nova.brilliant, brilliantLabel.take(12), Icons.Filled.Bolt)
+        else -> Quad(nova.sim1Container, nova.sim1, sim1Label.take(10), Icons.Filled.SimCard)
     }
 
     Row(
@@ -165,54 +161,6 @@ fun RouteBadge(
 }
 
 private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
-
-@Composable
-fun BrilliantStatusPill(
-    status: BrilliantBridgeStatus,
-    strings: NovaStrings,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val nova = LocalNovaColors.current
-    val dotColor = if (status.isInstalled) nova.sim1 else nova.gold
-    val borderColor = if (status.isInstalled) nova.brilliant.copy(alpha = 0.55f) else nova.glassBorder
-
-    Surface(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .clickable(onClick = onClick)
-            .testTag("brilliant_status_pill"),
-        shape = RoundedCornerShape(50),
-        color = nova.brilliantContainer.copy(alpha = if (nova.isDark) 0.7f else 0.9f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(dotColor)
-            )
-            Icon(
-                imageVector = Icons.Filled.Bolt,
-                contentDescription = null,
-                tint = nova.brilliant,
-                modifier = Modifier.size(14.dp)
-            )
-            Text(
-                text = if (status.isInstalled) strings.brilliantConnected else strings.brilliantShort,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
 
 @Composable
 fun PermissionAccessCard(
@@ -282,6 +230,9 @@ fun PermissionAccessCard(
     }
 }
 
+private val TIME_ONLY_FMT = ThreadLocal.withInitial { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+private val DATE_TIME_FMT = ThreadLocal.withInitial { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
+
 fun formatRelativeTime(timestamp: Long, language: AppLanguage): String {
     if (timestamp <= 0L) return ""
     val diffMs = System.currentTimeMillis() - timestamp
@@ -290,8 +241,8 @@ fun formatRelativeTime(timestamp: Long, language: AppLanguage): String {
     return when {
         minutes < 1 -> if (language == AppLanguage.BENGALI) "এইমাত্র" else "Just now"
         minutes < 60 -> if (language == AppLanguage.BENGALI) "$minutes মি. আগে" else "${minutes}m ago"
-        hours < 24 -> SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(timestamp))
-        else -> SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(timestamp))
+        hours < 24 -> TIME_ONLY_FMT.get()?.format(Date(timestamp)).orEmpty()
+        else -> DATE_TIME_FMT.get()?.format(Date(timestamp)).orEmpty()
     }
 }
 

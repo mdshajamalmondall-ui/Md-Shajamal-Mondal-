@@ -1,6 +1,6 @@
 {
   "name": "Shajamal",
-  "description": "Premium Dual-SIM Phone Dialer with direct Brilliant Connect VoIP bridge, T9 smart search, speed dial, call notes, and spam blocker.",
+  "description": "Fast Dual-SIM Phone Dialer (SIM 1 & SIM 2) with animated incoming/outgoing call screens, photo contact saving, T9 smart search, Caller ID, call recording, and spam blocker.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

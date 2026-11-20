@@ -5,9 +5,12 @@ import android.annotation.SuppressLint
 import android.app.role.RoleManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentProviderOperation
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -18,25 +21,36 @@ import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.SubscriptionManager
 import androidx.core.content.ContextCompat
-import com.example.data.model.BrilliantBridgeStatus
-import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallDirection
 import com.example.data.model.CallDispatchResult
 import com.example.data.model.CallLogItem
 import com.example.data.model.CallRoute
-import com.example.data.model.CallingAccountOption
 import com.example.data.model.DeviceContact
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SimCardInfo
 import com.example.data.model.UserPreferences
-import com.example.data.model.formatBangladeshNumberForBrilliant
 import com.example.data.model.normalizePhoneNumber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+
+data class NewContactPayload(
+    val fullName: String,
+    val phoneNumber: String,
+    val alternatePhone: String = "",
+    val email: String = "",
+    val company: String = "",
+    val jobTitle: String = "",
+    val address: String = "",
+    val notes: String = "",
+    val photoUri: Uri? = null
+)
 
 class TelephonyBridgeManager(private val context: Context) {
 
-    private val soundEngine = DialpadSoundEngine()
+    private var soundEngineInstance: DialpadSoundEngine? = null
+    private val soundEngine: DialpadSoundEngine
+        get() = soundEngineInstance ?: DialpadSoundEngine().also { soundEngineInstance = it }
 
     fun hasPermission(permission: String): Boolean {
         return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
@@ -96,20 +110,13 @@ class TelephonyBridgeManager(private val context: Context) {
             .onFailure { openAppInfoSettings() }
     }
 
-    fun openCallingAccountsSettings() {
-        val intent = Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { context.startActivity(intent) }
-            .onFailure { openSystemDefaultAppsSettings() }
-    }
-
     fun playDialpadSound(symbol: String, style: KeypadSoundStyle, volume: Float) {
         soundEngine.playKey(symbol, style, volume)
     }
 
     fun releaseToneGenerator() {
-        soundEngine.release()
+        soundEngineInstance?.release()
+        soundEngineInstance = null
     }
 
     @SuppressLint("MissingPermission")
@@ -201,122 +208,49 @@ class TelephonyBridgeManager(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    suspend fun inspectBrilliantBridge(preferredPackage: String): BrilliantBridgeStatus = withContext(Dispatchers.IO) {
-        val pm = context.packageManager
-        val candidates = (listOf(preferredPackage.trim()) + BrilliantBridgeStatus.KNOWN_PACKAGES)
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        var installedPkg: String? = null
-        var appLabel = "Brilliant Connect"
-
-        for (pkg in candidates) {
-            val appInfo = runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    pm.getApplicationInfo(pkg, PackageManager.ApplicationInfoFlags.of(0))
-                } else {
-                    @Suppress("DEPRECATION")
-                    pm.getApplicationInfo(pkg, 0)
-                }
-            }.getOrNull()
-            if (appInfo != null) {
-                installedPkg = pkg
-                appLabel = runCatching { pm.getApplicationLabel(appInfo).toString() }
-                    .getOrDefault("Brilliant Connect")
-                break
-            }
-        }
-
-        var telecomLabel: String? = null
-        val availableAccounts = mutableListOf<CallingAccountOption>()
-        if (hasPermission(Manifest.permission.READ_PHONE_STATE)) {
-            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-            val handles = runCatching { telecomManager?.callCapablePhoneAccounts ?: emptyList() }
-                .getOrDefault(emptyList())
-            handles.forEachIndexed { idx, handle ->
-                val account = runCatching { telecomManager?.getPhoneAccount(handle) }.getOrNull()
-                val label = account?.label?.toString()?.takeIf { it.isNotBlank() } ?: "Account ${idx + 1}"
-                val pkg = handle.componentName.packageName
-                val isBrilliantOrVoip = pkg.contains("brilliant", ignoreCase = true) ||
-                    (installedPkg != null && pkg == installedPkg) ||
-                    label.contains("brilliant", ignoreCase = true) ||
-                    pkg.contains("sip", ignoreCase = true) ||
-                    label.contains("sip", ignoreCase = true) ||
-                    label.contains("voip", ignoreCase = true)
-                availableAccounts.add(
-                    CallingAccountOption(
-                        id = handle.id,
-                        label = label,
-                        packageName = pkg,
-                        isVoipOrBrilliant = isBrilliantOrVoip
-                    )
-                )
-                if (telecomLabel == null && isBrilliantOrVoip) {
-                    telecomLabel = label
-                }
-            }
-        }
-
-        BrilliantBridgeStatus(
-            isInstalled = installedPkg != null || telecomLabel != null,
-            packageName = installedPkg ?: preferredPackage.ifBlank { BrilliantBridgeStatus.DEFAULT_BRILLIANT_PACKAGE },
-            appLabel = appLabel,
-            hasTelecomVoipAccount = telecomLabel != null,
-            telecomAccountLabel = telecomLabel,
-            availableCallingAccounts = availableAccounts
-        )
-    }
-
-    @SuppressLint("MissingPermission")
-    fun placeSimCall(
-        rawNumber: String,
-        simInfo: SimCardInfo
-    ): CallDispatchResult {
-        val cleanNumber = normalizePhoneNumber(rawNumber)
-        if (cleanNumber.length < 3) {
+    fun placeSimCall(rawNumber: String, sim: SimCardInfo): CallDispatchResult {
+        val clean = normalizePhoneNumber(rawNumber)
+        if (clean.length < 3) {
             return CallDispatchResult.InvalidNumber(
-                reasonBn = "সঠিক ফোন নম্বর লিখুন",
-                reasonEn = "Enter a valid phone number"
+                reasonBn = "অনুগ্রহ করে সঠিক ফোন নম্বর লিখুন",
+                reasonEn = "Please enter a valid phone number"
             )
         }
-        val route = if (simInfo.slotIndex == 0) CallRoute.SIM_1 else CallRoute.SIM_2
-        val telUri = Uri.fromParts("tel", cleanNumber, null)
 
-        // Use TelecomManager.placeCall so when NovaCall is Default Dialer, the call stays 100% inside NovaCall's InCallActivity!
+        val route = if (sim.slotIndex == 1) CallRoute.SIM_2 else CallRoute.SIM_1
+        val uri = Uri.fromParts("tel", clean, null)
+
         if (hasPermission(Manifest.permission.CALL_PHONE)) {
             val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
             if (telecomManager != null) {
                 val placed = runCatching {
                     val extras = Bundle().apply {
-                        simInfo.phoneAccountHandle?.let {
-                            putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
+                        sim.phoneAccountHandle?.let { handle ->
+                            putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
                         }
                     }
-                    telecomManager.placeCall(telUri, extras)
+                    telecomManager.placeCall(uri, extras)
                     true
                 }.getOrDefault(false)
-
                 if (placed) {
                     return CallDispatchResult.Dispatched(
                         route = route,
-                        formattedNumber = cleanNumber,
-                        messageBn = "${simInfo.displayName} দিয়ে কল যাচ্ছে...",
-                        messageEn = "Calling via ${simInfo.displayName}..."
+                        formattedNumber = clean,
+                        messageBn = "${sim.displayName} দিয়ে কল যাচ্ছে: $clean",
+                        messageEn = "Calling via ${sim.displayName}: $clean"
                     )
                 }
             }
 
-            val callIntent = Intent(Intent.ACTION_CALL, telUri).apply {
+            val callIntent = Intent(Intent.ACTION_CALL, uri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                putExtra("com.android.phone.force.slot", true)
-                putExtra("com.android.phone.extra.slot", simInfo.slotIndex)
-                putExtra("simSlot", simInfo.slotIndex)
-                putExtra("slot_id", simInfo.slotIndex)
-                if (simInfo.subscriptionId >= 0) {
-                    putExtra("subscription", simInfo.subscriptionId)
+                sim.phoneAccountHandle?.let { handle ->
+                    putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
                 }
-                simInfo.phoneAccountHandle?.let {
-                    putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
+                if (sim.subscriptionId > 0) {
+                    putExtra("com.android.phone.extra.slot", sim.slotIndex)
+                    putExtra("simSlot", sim.slotIndex)
+                    putExtra("subscription", sim.subscriptionId)
                 }
             }
             val started = runCatching {
@@ -326,242 +260,29 @@ class TelephonyBridgeManager(private val context: Context) {
             if (started) {
                 return CallDispatchResult.Dispatched(
                     route = route,
-                    formattedNumber = cleanNumber,
-                    messageBn = "${simInfo.displayName} দিয়ে কল যাচ্ছে...",
-                    messageEn = "Calling via ${simInfo.displayName}..."
+                    formattedNumber = clean,
+                    messageBn = "${sim.displayName} দিয়ে কল যাচ্ছে: $clean",
+                    messageEn = "Calling via ${sim.displayName}: $clean"
                 )
             }
         }
 
-        val dialIntent = Intent(Intent.ACTION_DIAL, telUri).apply {
+        val dialIntent = Intent(Intent.ACTION_DIAL, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra("com.android.phone.extra.slot", simInfo.slotIndex)
         }
         return runCatching {
             context.startActivity(dialIntent)
             CallDispatchResult.Dispatched(
                 route = route,
-                formattedNumber = cleanNumber,
-                messageBn = "কল শুরু করতে ফোনের CALL পারমিশন দিন",
-                messageEn = "Grant CALL permission for direct in-app calling"
+                formattedNumber = clean,
+                messageBn = "কল পারমিশন না থাকায় ডায়ালার খোলা হয়েছে ($clean)",
+                messageEn = "Opened dialer for $clean (grant Call permission for 1-tap calling)"
             )
         }.getOrElse {
             CallDispatchResult.Error(
-                messageBn = "কল শুরু করা যায়নি: ${it.localizedMessage.orEmpty()}",
-                messageEn = "Unable to place call: ${it.localizedMessage.orEmpty()}"
+                messageBn = "কল শুরু করা যায়নি। ফোন পারমিশন চেক করুন।",
+                messageEn = "Could not start call. Please check Phone permission."
             )
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    fun placeBrilliantCall(
-        rawNumber: String,
-        bridgeStatus: BrilliantBridgeStatus,
-        prefs: UserPreferences,
-        fallbackSim: SimCardInfo
-    ): CallDispatchResult {
-        val formatted = formatBangladeshNumberForBrilliant(rawNumber, prefs.brilliantAutoFormatBd)
-        if (formatted.length < 3) {
-            return CallDispatchResult.InvalidNumber(
-                reasonBn = "ব্রিলিয়ান্ট কলের জন্য সঠিক নম্বর লিখুন",
-                reasonEn = "Enter a valid phone number for Brilliant Call"
-            )
-        }
-
-        val targetPackage = bridgeStatus.packageName.ifBlank { prefs.brilliantPackageName }
-
-        if (prefs.brilliantAutoCopyClipboard) {
-            copyToClipboard("Brilliant Call", formatted)
-        }
-
-        val acctTag = prefs.brilliantAccountNumber.takeIf { it.isNotBlank() }
-            ?: prefs.brilliantAccountName.takeIf { it.isNotBlank() }
-
-        // Priority 1: Linked or Auto-Detected Telecom VoIP/Brilliant Calling Account (keeps call 100% INSIDE Shajamal!)
-        if (hasPermission(Manifest.permission.CALL_PHONE)) {
-            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-            val handles = runCatching { telecomManager?.callCapablePhoneAccounts ?: emptyList() }
-                .getOrDefault(emptyList())
-
-            val linkedHandle = if (prefs.brilliantLinkedAccountId.isNotBlank()) {
-                handles.firstOrNull { it.id == prefs.brilliantLinkedAccountId }
-            } else null
-
-            val brilliantHandle = linkedHandle ?: handles.firstOrNull { handle ->
-                val pkgMatch = handle.componentName.packageName == targetPackage ||
-                    handle.componentName.packageName.contains("brilliant", ignoreCase = true) ||
-                    handle.componentName.packageName.contains("sip", ignoreCase = true)
-                val label = runCatching { telecomManager?.getPhoneAccount(handle)?.label?.toString() }.getOrNull()
-                pkgMatch || (label?.contains("brilliant", ignoreCase = true) == true) ||
-                    (label?.contains("voip", ignoreCase = true) == true)
-            }
-
-            if (telecomManager != null && brilliantHandle != null) {
-                val telUri = Uri.fromParts("tel", formatted, null)
-                val placed = runCatching {
-                    val extras = Bundle().apply {
-                        putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, brilliantHandle)
-                    }
-                    telecomManager.placeCall(telUri, extras)
-                    true
-                }.getOrDefault(false)
-                if (placed) {
-                    val labelInfo = acctTag ?: bridgeStatus.telecomAccountLabel ?: "Brilliant VoIP"
-                    return CallDispatchResult.Dispatched(
-                        route = CallRoute.BRILLIANT,
-                        formattedNumber = formatted,
-                        messageBn = "অ্যাপের ভেতর থেকেই $labelInfo অ্যাকাউন্টে কল যাচ্ছে...",
-                        messageEn = "Calling via $labelInfo inside Shajamal..."
-                    )
-                }
-            }
-        }
-
-        // Priority 2: Stay strictly inside Shajamal when external handoff is disabled (default!)
-        if (!prefs.brilliantExternalHandoff) {
-            if (hasPermission(Manifest.permission.CALL_PHONE)) {
-                val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-                val telUri = Uri.fromParts("tel", formatted, null)
-                val placedInApp = runCatching {
-                    val extras = Bundle().apply {
-                        fallbackSim.phoneAccountHandle?.let {
-                            putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
-                        }
-                    }
-                    telecomManager?.placeCall(telUri, extras)
-                    telecomManager != null
-                }.getOrDefault(false)
-
-                if (placedInApp) {
-                    val acctInfo = acctTag?.let { " ($it)" } ?: ""
-                    return CallDispatchResult.Dispatched(
-                        route = CallRoute.BRILLIANT,
-                        formattedNumber = formatted,
-                        messageBn = "অ্যাপের ভেতর থেকেই কল যাচ্ছে$acctInfo • বাইরের অ্যাপ খোলা হয়নি",
-                        messageEn = "Calling in-app$acctInfo without leaving Shajamal"
-                    )
-                }
-            }
-            return CallDispatchResult.Error(
-                messageBn = "অ্যাপের ভেতর থেকে কল করতে Shajamal-কে ডিফল্ট ফোন অ্যাপ ও CALL পারমিশন দিন",
-                messageEn = "Set Shajamal as Default Phone App & grant CALL permission for in-app calling"
-            )
-        }
-
-        // Priority 3 (Only when user explicitly enabled External Brilliant Handoff in Settings)
-        if (!bridgeStatus.isInstalled) {
-            return CallDispatchResult.BrilliantNotInstalled(targetPackage)
-        }
-
-        val telUri = Uri.parse("tel:${Uri.encode(formatted)}")
-        val sipUri = Uri.parse("sip:$formatted")
-
-        val intentOrder: List<Intent> = when (prefs.brilliantLaunchMode) {
-            BrilliantLaunchMode.DIRECT_CALL_INTENT -> listOf(
-                buildPackageIntent(Intent.ACTION_CALL, telUri, targetPackage),
-                buildPackageIntent(Intent.ACTION_DIAL, telUri, targetPackage),
-                buildPackageIntent(Intent.ACTION_VIEW, telUri, targetPackage)
-            )
-            BrilliantLaunchMode.DIAL_INTENT -> listOf(
-                buildPackageIntent(Intent.ACTION_DIAL, telUri, targetPackage),
-                buildPackageIntent(Intent.ACTION_VIEW, telUri, targetPackage)
-            )
-            BrilliantLaunchMode.SIP_URI -> listOf(
-                buildPackageIntent(Intent.ACTION_VIEW, sipUri, targetPackage),
-                buildPackageIntent(Intent.ACTION_CALL, sipUri, targetPackage),
-                buildPackageIntent(Intent.ACTION_DIAL, telUri, targetPackage)
-            )
-            BrilliantLaunchMode.LAUNCH_AND_COPY -> emptyList()
-            BrilliantLaunchMode.SMART_AUTO -> listOf(
-                buildPackageIntent(Intent.ACTION_CALL, telUri, targetPackage),
-                buildPackageIntent(Intent.ACTION_DIAL, telUri, targetPackage),
-                buildPackageIntent(Intent.ACTION_VIEW, telUri, targetPackage),
-                buildPackageIntent(Intent.ACTION_VIEW, sipUri, targetPackage)
-            )
-        }
-
-        val pm = context.packageManager
-        for (intent in intentOrder) {
-            if (intent.action == Intent.ACTION_CALL && !hasPermission(Manifest.permission.CALL_PHONE)) {
-                continue
-            }
-            val canHandle = runCatching { pm.resolveActivity(intent, 0) != null }.getOrDefault(false)
-            if (canHandle) {
-                val started = runCatching {
-                    context.startActivity(intent)
-                    true
-                }.getOrDefault(false)
-                if (started) {
-                    return CallDispatchResult.Dispatched(
-                        route = CallRoute.BRILLIANT,
-                        formattedNumber = formatted,
-                        messageBn = "ব্রিলিয়ান্ট কানেক্টে কল পাঠানো হয়েছে ($formatted)",
-                        messageEn = "Routed to Brilliant Connect ($formatted)"
-                    )
-                }
-            }
-        }
-
-        val launchIntent = pm.getLaunchIntentForPackage(targetPackage)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra("phone_number", formatted)
-            putExtra("number", formatted)
-            putExtra("tel", formatted)
-            putExtra(Intent.EXTRA_PHONE_NUMBER, formatted)
-        }
-
-        if (launchIntent != null) {
-            val launched = runCatching {
-                context.startActivity(launchIntent)
-                true
-            }.getOrDefault(false)
-            if (launched) {
-                return CallDispatchResult.Dispatched(
-                    route = CallRoute.BRILLIANT,
-                    formattedNumber = formatted,
-                    messageBn = "ব্রিলিয়ান্ট খোলা হয়েছে ও নম্বর কপি করা হয়েছে ($formatted)",
-                    messageEn = "Opened Brilliant Connect with $formatted copied"
-                )
-            }
-        }
-
-        return CallDispatchResult.BrilliantNotInstalled(targetPackage)
-    }
-
-    private fun buildPackageIntent(action: String, uri: Uri, pkg: String): Intent {
-        return Intent(action, uri).apply {
-            setPackage(pkg)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-    }
-
-    fun openBrilliantApp(packageName: String): Boolean {
-        val intent = context.packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        } ?: return false
-        return runCatching {
-            context.startActivity(intent)
-            true
-        }.getOrDefault(false)
-    }
-
-    fun openPlayStoreForBrilliant(packageName: String) {
-        val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val openedMarket = runCatching {
-            context.startActivity(marketIntent)
-            true
-        }.getOrDefault(false)
-
-        if (!openedMarket) {
-            val webIntent = Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
-            ).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            runCatching { context.startActivity(webIntent) }
         }
     }
 
@@ -612,6 +333,203 @@ class TelephonyBridgeManager(private val context: Context) {
             context.startActivity(intent)
             true
         }.getOrDefault(false)
+    }
+
+    suspend fun saveContactWithPhoto(payload: NewContactPayload): Result<String> = withContext(Dispatchers.IO) {
+        if (!hasPermission(Manifest.permission.WRITE_CONTACTS)) {
+            return@withContext Result.failure(SecurityException("WRITE_CONTACTS_DENIED"))
+        }
+        val cleanName = payload.fullName.trim()
+        val cleanPhone = payload.phoneNumber.trim()
+        if (cleanName.isEmpty() || cleanPhone.isEmpty()) {
+            return@withContext Result.failure(IllegalArgumentException("Name and phone required"))
+        }
+
+        runCatching {
+            val ops = ArrayList<ContentProviderOperation>()
+
+            // 1. Insert RawContact
+            ops.add(
+                ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
+                    .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null)
+                    .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null)
+                    .build()
+            )
+
+            // 2. Display Name
+            ops.add(
+                ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                    .withValue(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE
+                    )
+                    .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, cleanName)
+                    .build()
+            )
+
+            // 3. Primary Mobile Phone
+            ops.add(
+                ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                    .withValue(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE
+                    )
+                    .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, cleanPhone)
+                    .withValue(
+                        ContactsContract.CommonDataKinds.Phone.TYPE,
+                        ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE
+                    )
+                    .build()
+            )
+
+            // 4. Optional Alternate Phone
+            val altPhone = payload.alternatePhone.trim()
+            if (altPhone.isNotEmpty()) {
+                ops.add(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                        .withValue(
+                            ContactsContract.Data.MIMETYPE,
+                            ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE
+                        )
+                        .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, altPhone)
+                        .withValue(
+                            ContactsContract.CommonDataKinds.Phone.TYPE,
+                            ContactsContract.CommonDataKinds.Phone.TYPE_HOME
+                        )
+                        .build()
+                )
+            }
+
+            // 5. Optional Email
+            val email = payload.email.trim()
+            if (email.isNotEmpty()) {
+                ops.add(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                        .withValue(
+                            ContactsContract.Data.MIMETYPE,
+                            ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE
+                        )
+                        .withValue(ContactsContract.CommonDataKinds.Email.ADDRESS, email)
+                        .withValue(
+                            ContactsContract.CommonDataKinds.Email.TYPE,
+                            ContactsContract.CommonDataKinds.Email.TYPE_WORK
+                        )
+                        .build()
+                )
+            }
+
+            // 6. Optional Company / Job Title
+            val company = payload.company.trim()
+            val title = payload.jobTitle.trim()
+            if (company.isNotEmpty() || title.isNotEmpty()) {
+                ops.add(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                        .withValue(
+                            ContactsContract.Data.MIMETYPE,
+                            ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE
+                        )
+                        .withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, company)
+                        .withValue(ContactsContract.CommonDataKinds.Organization.TITLE, title)
+                        .withValue(
+                            ContactsContract.CommonDataKinds.Organization.TYPE,
+                            ContactsContract.CommonDataKinds.Organization.TYPE_WORK
+                        )
+                        .build()
+                )
+            }
+
+            // 7. Optional Address
+            val address = payload.address.trim()
+            if (address.isNotEmpty()) {
+                ops.add(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                        .withValue(
+                            ContactsContract.Data.MIMETYPE,
+                            ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE
+                        )
+                        .withValue(ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS, address)
+                        .withValue(
+                            ContactsContract.CommonDataKinds.StructuredPostal.TYPE,
+                            ContactsContract.CommonDataKinds.StructuredPostal.TYPE_HOME
+                        )
+                        .build()
+                )
+            }
+
+            // 8. Optional Notes
+            val notes = payload.notes.trim()
+            if (notes.isNotEmpty()) {
+                ops.add(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                        .withValue(
+                            ContactsContract.Data.MIMETYPE,
+                            ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE
+                        )
+                        .withValue(ContactsContract.CommonDataKinds.Note.NOTE, notes)
+                        .build()
+                )
+            }
+
+            // 9. Optional Contact Photo (compressed safely to max 512px JPEG)
+            payload.photoUri?.let { uri ->
+                decodeContactPhotoBytes(uri)?.let { photoBytes ->
+                    ops.add(
+                        ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                            .withValue(
+                                ContactsContract.Data.MIMETYPE,
+                                ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE
+                            )
+                            .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, photoBytes)
+                            .build()
+                    )
+                }
+            }
+
+            context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
+            cleanName
+        }
+    }
+
+    private fun decodeContactPhotoBytes(uri: Uri): ByteArray? {
+        return runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, bounds)
+            }
+            val maxDim = maxOf(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
+            var sampleSize = 1
+            while (maxDim / sampleSize > 640) {
+                sampleSize *= 2
+            }
+            val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            val bitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOpts)
+            } ?: return null
+
+            val scaled = if (bitmap.width > 512 || bitmap.height > 512) {
+                val ratio = 512f / maxOf(bitmap.width, bitmap.height)
+                val targetW = (bitmap.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (bitmap.height * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(bitmap, targetW, targetH, true).also {
+                    if (it != bitmap) bitmap.recycle()
+                }
+            } else {
+                bitmap
+            }
+
+            val out = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            scaled.recycle()
+            out.toByteArray()
+        }.getOrNull()
     }
 
     fun copyToClipboard(label: String, text: String) {
@@ -673,7 +591,7 @@ class TelephonyBridgeManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     suspend fun loadSystemCallLogs(): List<CallLogItem> = withContext(Dispatchers.IO) {
         if (!hasPermission(Manifest.permission.READ_CALL_LOG)) return@withContext emptyList()
-        val items = mutableListOf<CallLogItem>()
+        val items = ArrayList<CallLogItem>(80)
 
         val projection = arrayOf(
             CallLog.Calls._ID,
@@ -683,8 +601,7 @@ class TelephonyBridgeManager(private val context: Context) {
             CallLog.Calls.TYPE,
             CallLog.Calls.DATE,
             CallLog.Calls.DURATION,
-            CallLog.Calls.PHONE_ACCOUNT_ID,
-            CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME
+            CallLog.Calls.PHONE_ACCOUNT_ID
         )
 
         runCatching {
@@ -703,10 +620,9 @@ class TelephonyBridgeManager(private val context: Context) {
                 val dateIdx = cursor.getColumnIndex(CallLog.Calls.DATE)
                 val durIdx = cursor.getColumnIndex(CallLog.Calls.DURATION)
                 val acctIdIdx = cursor.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_ID)
-                val compIdx = cursor.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME)
 
                 var count = 0
-                while (cursor.moveToNext() && count < 150) {
+                while (cursor.moveToNext() && count < 80) {
                     count++
                     val number = if (numIdx >= 0) cursor.getString(numIdx).orEmpty() else ""
                     val normalized = normalizePhoneNumber(number)
@@ -716,7 +632,6 @@ class TelephonyBridgeManager(private val context: Context) {
                     val timestamp = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
                     val duration = if (durIdx >= 0) cursor.getLong(durIdx) else 0L
                     val acctId = if (acctIdIdx >= 0) cursor.getString(acctIdIdx).orEmpty() else ""
-                    val comp = if (compIdx >= 0) cursor.getString(compIdx).orEmpty() else ""
 
                     val direction = when (rawType) {
                         CallLog.Calls.INCOMING_TYPE -> CallDirection.INCOMING
@@ -725,10 +640,10 @@ class TelephonyBridgeManager(private val context: Context) {
                         else -> CallDirection.OUTGOING
                     }
 
-                    val route = when {
-                        comp.contains("brilliant", ignoreCase = true) -> CallRoute.BRILLIANT
-                        acctId.endsWith("2") || acctId.contains("sim2", ignoreCase = true) -> CallRoute.SIM_2
-                        else -> CallRoute.SIM_1
+                    val route = if (acctId.endsWith("2") || acctId.contains("sim2", ignoreCase = true)) {
+                        CallRoute.SIM_2
+                    } else {
+                        CallRoute.SIM_1
                     }
 
                     items.add(

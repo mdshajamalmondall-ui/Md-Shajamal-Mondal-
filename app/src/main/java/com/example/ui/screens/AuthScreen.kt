@@ -21,8 +21,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -165,10 +165,10 @@ fun AuthScreen(
                         subtitle = "অচেনা নম্বর কল দিলে বা ডায়ালপ্যাডে তুললেই কমিউনিটি নাম ও অপারেটর দেখাবে"
                     )
                     AuthFeatureRow(
-                        icon = Icons.Filled.Bolt,
-                        tint = nova.brilliant,
-                        title = "ডুয়াল-সিম ও ব্রিলিয়ান্ট ইন-অ্যাপ কল",
-                        subtitle = "এক অ্যাপেই ইনকামিং-আউটগোয়িং কল, কল নোট এবং স্প্যাম ব্লক"
+                        icon = Icons.Filled.SimCard,
+                        tint = nova.sim2,
+                        title = "ডুয়াল-সিম (SIM 1 ও SIM 2) অ্যানিমেটেড কল",
+                        subtitle = "এক অ্যাপেই ইনকামিং-আউটগোয়িং কল, ছবিসহ কন্টাক্ট সেভ, কল রেকর্ড ও স্প্যাম ব্লক"
                     )
                 }
             }

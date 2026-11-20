@@ -27,7 +27,6 @@ import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CloudSync
@@ -111,7 +110,6 @@ fun SettingsScreen(
     onChangeSoundVolume: (Float) -> Unit,
     onPreviewSound: () -> Unit,
     onToggleHaptic: (Boolean) -> Unit,
-    onToggleBrilliantExternalHandoff: (Boolean) -> Unit,
     onToggleAutoSpeaker: (Boolean) -> Unit,
     onUpdateDefaultRoute: (DefaultRoutePreference) -> Unit,
     onUpdateSimAlias: (Int, String) -> Unit,
@@ -752,24 +750,13 @@ fun SettingsScreen(
                     }
                 }
 
-                // 5. Call & Brilliant In-App Routing
+                // 5. Call & Dual-SIM Settings
                 item {
                     SettingsSectionCard(
-                        title = if (isBn) "কল, ডুয়াল সিম ও ব্রিলিয়ান্ট মোড" else "Call, Dual-SIM & Brilliant Mode",
-                        icon = Icons.Filled.Bolt,
-                        iconTint = nova.brilliant
+                        title = if (isBn) "কল ও ডুয়াল সিম সেটিংস" else "Call & Dual-SIM Settings",
+                        icon = Icons.Filled.SimCard,
+                        iconTint = nova.sim1
                     ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "ব্রিলিয়ান্ট কল সবসময় এই অ্যাপেই রাখুন" else "Keep Brilliant Calls Inside Shajamal",
-                            subtitle = if (isBn) {
-                                "চালু থাকলে কল দিলে সরাসরি ব্রিলিয়ান্ট অ্যাপে নিয়ে যাবে না—এই অ্যাপের ভেতর থেকেই কল চলবে।"
-                            } else {
-                                "When ON, tapping Brilliant stays inside Shajamal's call screen instead of switching to the external Brilliant app."
-                            },
-                            checked = !state.preferences.brilliantExternalHandoff,
-                            onCheckedChange = { keepInApp -> onToggleBrilliantExternalHandoff(!keepInApp) },
-                            tag = "switch_keep_brilliant_in_app"
-                        )
                         SettingsSwitchRow(
                             title = if (isBn) "কল শুরু হলে অটো স্পিকার" else "Auto Speakerphone on Call",
                             subtitle = null,
@@ -787,8 +774,7 @@ fun SettingsScreen(
                         val routes = listOf(
                             DefaultRoutePreference.ASK to strings.askEveryTime,
                             DefaultRoutePreference.SIM_1 to "SIM 1",
-                            DefaultRoutePreference.SIM_2 to "SIM 2",
-                            DefaultRoutePreference.BRILLIANT to strings.brilliantShort
+                            DefaultRoutePreference.SIM_2 to "SIM 2"
                         )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),

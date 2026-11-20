@@ -92,12 +92,11 @@ jobs:
           RELEASE_NOTES="Tap Shajamal.apk below to download and install directly on your Android phone.
 
           Latest updates:
-          - Ultra-fast startup & smooth background loading (parallel call logs, contacts & SIM loading)
-          - App now opens directly on the Recents tab with quick Settings button & Dialpad FAB
-          - Brilliant Account setup (save Brilliant number/name, link Android Calling Accounts, stay strictly in-app)
-          - 6 rich app background color themes (Royal Sapphire, Emerald Forest, Royal Amethyst, Ocean Teal, Crimson Velvet, Pearl White)
-          - Contact photos in Recents, swipe right to call, swipe left to delete, long-press for call options
-          - Compact T9 dialpad, Unknown Caller ID lookup & In-call Recording (with Settings player)"
+          - Pure Dual-SIM experience (SIM 1 & SIM 2 only — all Brilliant Connect tabs & options removed)
+          - Even faster cold startup (zero-contention Recents-first loading, lazy sound engine, cached time formatters)
+          - Rich animations for BOTH Outgoing calls (rotating orbital halo, 3-layer radar waves, signal bars & moving arrows) and Incoming calls (shockwaves, shaking handset & glowing pills)
+          - Save Contacts with Photo & Full Details directly in Shajamal (gallery photo picker, alternate phone, email, company, job title, address & notes)
+          - 6 rich app background color themes, contact photos in Recents, swipe right to call, swipe left to delete, compact T9 dialpad, Unknown Caller ID & Call Recording"
 
           if gh release view latest-apk >/dev/null 2>&1; then
             gh release upload latest-apk Shajamal.apk --clobber

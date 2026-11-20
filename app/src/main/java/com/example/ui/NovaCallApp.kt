@@ -20,12 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Dialpad
 import androidx.compose.material.icons.outlined.History
@@ -65,15 +63,15 @@ import com.example.data.local.SpeedDialEntity
 import com.example.data.model.AppLanguage
 import com.example.data.model.normalizePhoneNumber
 import com.example.data.telephony.CallStateManager
+import com.example.data.telephony.NewContactPayload
 import com.example.ui.components.BlockNumberDialog
-import com.example.ui.components.BrilliantNotInstalledDialog
 import com.example.ui.components.CallNoteDialog
 import com.example.ui.components.CallerDetailBottomSheet
 import com.example.ui.components.ChooseLineBottomSheet
+import com.example.ui.components.SaveContactBottomSheet
 import com.example.ui.components.SpeedDialAssignDialog
 import com.example.ui.components.TagCallerDialog
 import com.example.ui.i18n.novaStrings
-import com.example.ui.screens.BrilliantToolsScreen
 import com.example.ui.screens.ContactsScreen
 import com.example.ui.screens.KeypadScreen
 import com.example.ui.screens.RecentsScreen
@@ -117,6 +115,11 @@ private data class TagCallerDialogRequest(
     val category: CallerCategory = CallerCategory.PERSONAL
 )
 
+private data class SaveContactDialogRequest(
+    val number: String,
+    val name: String
+)
+
 @Composable
 fun NovaCallApp(
     viewModel: DialerViewModel,
@@ -133,12 +136,32 @@ fun NovaCallApp(
     var blockDialogRequest by remember { mutableStateOf<BlockDialogRequest?>(null) }
     var speedDialDialogRequest by remember { mutableStateOf<SpeedDialDialogRequest?>(null) }
     var tagCallerRequest by remember { mutableStateOf<TagCallerDialogRequest?>(null) }
-    var missingBrilliantPackage by remember { mutableStateOf<String?>(null) }
+    var saveContactRequest by remember { mutableStateOf<SaveContactDialogRequest?>(null) }
+    var pendingContactPayload by remember { mutableStateOf<NewContactPayload?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
         viewModel.refreshSystemData(force = true)
+    }
+
+    val writeContactsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pending = pendingContactPayload
+        pendingContactPayload = null
+        if (pending != null) {
+            if (granted) {
+                viewModel.saveContactWithPhoto(
+                    payload = pending,
+                    onSaved = { saveContactRequest = null },
+                    onNeedPermission = {}
+                )
+            } else {
+                saveContactRequest = null
+                viewModel.openAddContact(pending.phoneNumber, pending.fullName)
+            }
+        }
     }
 
     val defaultDialerLauncher = rememberLauncherForActivityResult(
@@ -152,6 +175,7 @@ fun NovaCallApp(
             add(Manifest.permission.CALL_PHONE)
             add(Manifest.permission.READ_PHONE_STATE)
             add(Manifest.permission.READ_CONTACTS)
+            add(Manifest.permission.WRITE_CONTACTS)
             add(Manifest.permission.READ_CALL_LOG)
             add(Manifest.permission.WRITE_CALL_LOG)
             add(Manifest.permission.ANSWER_PHONE_CALLS)
@@ -184,7 +208,6 @@ fun NovaCallApp(
         viewModel.events.collect { event ->
             when (event) {
                 is DialerUiEvent.ShowMessage -> snackbarHostState.showSnackbar(event.text)
-                is DialerUiEvent.PromptInstallBrilliant -> missingBrilliantPackage = event.packageName
             }
         }
     }
@@ -201,8 +224,7 @@ fun NovaCallApp(
         listOf(
             NavDestinationSpec(NovaTab.RECENTS, strings.tabRecents, Icons.Filled.History, Icons.Outlined.History, "nav_recents"),
             NavDestinationSpec(NovaTab.KEYPAD, strings.tabKeypad, Icons.Filled.Dialpad, Icons.Outlined.Dialpad, "nav_keypad"),
-            NavDestinationSpec(NovaTab.CONTACTS, strings.tabContacts, Icons.Filled.Contacts, Icons.Outlined.Contacts, "nav_contacts"),
-            NavDestinationSpec(NovaTab.BRIDGE, strings.tabBridge, Icons.Filled.Bolt, Icons.Outlined.Bolt, "nav_bridge")
+            NavDestinationSpec(NovaTab.CONTACTS, strings.tabContacts, Icons.Filled.Contacts, Icons.Outlined.Contacts, "nav_contacts")
         )
     }
 
@@ -246,9 +268,9 @@ fun NovaCallApp(
                                         )
                                     },
                                     colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = if (item.tab == NovaTab.BRIDGE) nova.brilliant else MaterialTheme.colorScheme.primary,
-                                        selectedTextColor = if (item.tab == NovaTab.BRIDGE) nova.brilliant else MaterialTheme.colorScheme.primary,
-                                        indicatorColor = if (item.tab == NovaTab.BRIDGE) nova.brilliantContainer else MaterialTheme.colorScheme.primaryContainer,
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -315,9 +337,9 @@ fun NovaCallApp(
                                             )
                                         },
                                         colors = NavigationRailItemDefaults.colors(
-                                            selectedIconColor = if (item.tab == NovaTab.BRIDGE) nova.brilliant else MaterialTheme.colorScheme.primary,
-                                            selectedTextColor = if (item.tab == NovaTab.BRIDGE) nova.brilliant else MaterialTheme.colorScheme.primary,
-                                            indicatorColor = if (item.tab == NovaTab.BRIDGE) nova.brilliantContainer else MaterialTheme.colorScheme.primaryContainer
+                                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer
                                         )
                                     )
                                 }
@@ -347,7 +369,6 @@ fun NovaCallApp(
                                     onChangeSoundVolume = viewModel::updateKeypadSoundVolume,
                                     onPreviewSound = { viewModel.previewKeypadSound() },
                                     onToggleHaptic = viewModel::updateHaptic,
-                                    onToggleBrilliantExternalHandoff = viewModel::updateBrilliantExternalHandoff,
                                     onToggleAutoSpeaker = viewModel::updateAutoSpeaker,
                                     onUpdateDefaultRoute = viewModel::updateDefaultRoute,
                                     onUpdateSimAlias = viewModel::updateSimAlias,
@@ -378,7 +399,13 @@ fun NovaCallApp(
                                         onClearAll = viewModel::onDialClear,
                                         onCallRoute = viewModel::placeCall,
                                         onWhatsApp = viewModel::openWhatsApp,
-                                        onAddContact = { num -> viewModel.openAddContact(num) },
+                                        onAddContact = { num ->
+                                            saveContactRequest = SaveContactDialogRequest(
+                                                number = num,
+                                                name = state.cloudCallerId.dialedLookup?.displayName
+                                                    ?: state.t9Matches.firstOrNull()?.name.orEmpty()
+                                            )
+                                        },
                                         onCopyNumber = viewModel::copyNumber,
                                         onOpenNoteDialog = { num, name ->
                                             val existing = state.callNotes.firstOrNull { it.normalizedNumber == normalizePhoneNumber(num) }
@@ -389,7 +416,6 @@ fun NovaCallApp(
                                                 hasReminder = existing?.hasReminder ?: false
                                             )
                                         },
-                                        onOpenBridgeTab = { viewModel.selectTab(NovaTab.BRIDGE) },
                                         onOpenSettings = viewModel::openSettings,
                                         onRequestDefaultDialer = requestDefaultDialer,
                                         onOpenTagCaller = { num, existingName ->
@@ -435,7 +461,9 @@ fun NovaCallApp(
                                         strings = strings,
                                         onSearchChange = viewModel::updateContactSearch,
                                         onRequestPermissions = requestAllPermissions,
-                                        onAddNewContact = { viewModel.openAddContact("") },
+                                        onAddNewContact = {
+                                            saveContactRequest = SaveContactDialogRequest("", "")
+                                        },
                                         onCallRoute = viewModel::placeCall,
                                         onOpenCallerDetail = viewModel::openCallerDetail,
                                         onEditSpeedDialSlot = { digit, existing ->
@@ -446,40 +474,6 @@ fun NovaCallApp(
                                                 initialName = existing?.name.orEmpty()
                                             )
                                         }
-                                    )
-
-                                    NovaTab.BRIDGE -> BrilliantToolsScreen(
-                                        state = state,
-                                        strings = strings,
-                                        onTestBridge = viewModel::testBrilliantBridge,
-                                        onInstallBrilliant = { viewModel.openPlayStoreForBrilliant() },
-                                        onSaveBrilliantAccount = viewModel::updateBrilliantAccount,
-                                        onSelectLinkedCallingAccount = viewModel::updateBrilliantLinkedAccountId,
-                                        onOpenCallingAccountsSettings = viewModel::openCallingAccountsSettings,
-                                        onToggleBrilliantExternalHandoff = viewModel::updateBrilliantExternalHandoff,
-                                        onUpdateBrilliantPackage = viewModel::updateBrilliantPackage,
-                                        onUpdateLaunchMode = viewModel::updateBrilliantLaunchMode,
-                                        onUpdateAutoBd = viewModel::updateBrilliantAutoFormatBd,
-                                        onUpdateAutoCopy = viewModel::updateBrilliantAutoCopy,
-                                        onUpdateSmartPrefixes = viewModel::updateBrilliantSmartPrefixes,
-                                        onUpdateDefaultRoute = viewModel::updateDefaultRoute,
-                                        onUpdateSimAlias = viewModel::updateSimAlias,
-                                        onOpenAddNoteDialog = {
-                                            noteDialogRequest = NoteDialogRequest("", "", "", false)
-                                        },
-                                        onDeleteNote = viewModel::deleteCallNote,
-                                        onCallNumber = viewModel::placeCall,
-                                        onOpenAddBlockDialog = {
-                                            blockDialogRequest = BlockDialogRequest("", "")
-                                        },
-                                        onUnblockNumber = viewModel::unblockNumber,
-                                        onAddQuickReply = viewModel::addQuickReply,
-                                        onRemoveQuickReply = viewModel::removeQuickReply,
-                                        onToggleDarkTheme = viewModel::updateDarkTheme,
-                                        onSelectThemePalette = viewModel::updateThemePalette,
-                                        onToggleDtmf = viewModel::updateDtmfSound,
-                                        onToggleHaptic = viewModel::updateHaptic,
-                                        onToggleLanguage = viewModel::updateLanguage
                                     )
                                 }
                             }
@@ -499,7 +493,12 @@ fun NovaCallApp(
                     onWhatsApp = { viewModel.openWhatsApp(target.number) },
                     onQuickSms = { template -> viewModel.openSms(target.number, template) },
                     onCopy = { viewModel.copyNumber(target.number) },
-                    onSaveContact = { viewModel.openAddContact(target.number, target.name.orEmpty()) },
+                    onSaveContact = {
+                        saveContactRequest = SaveContactDialogRequest(
+                            number = target.number,
+                            name = target.name.orEmpty()
+                        )
+                    },
                     onOpenNoteDialog = {
                         val existing = state.callNotes.firstOrNull { it.normalizedNumber == target.normalizedNumber }
                         noteDialogRequest = NoteDialogRequest(
@@ -593,15 +592,27 @@ fun NovaCallApp(
                 )
             }
 
-            // Dialog: Brilliant Connect Not Installed Guidance
-            missingBrilliantPackage?.let { pkg ->
-                BrilliantNotInstalledDialog(
-                    packageName = pkg,
+            // Bottom Sheet: Save Contact with Photo & Full Details
+            saveContactRequest?.let { req ->
+                SaveContactBottomSheet(
+                    initialNumber = req.number,
+                    initialName = req.name,
                     language = state.preferences.language,
                     strings = strings,
-                    onDismiss = { missingBrilliantPackage = null },
-                    onInstallClick = { viewModel.openPlayStoreForBrilliant(pkg) },
-                    onOpenSettingsClick = { viewModel.selectTab(NovaTab.BRIDGE) }
+                    onDismiss = { saveContactRequest = null },
+                    onSave = { payload ->
+                        viewModel.saveContactWithPhoto(
+                            payload = payload,
+                            onSaved = { saveContactRequest = null },
+                            onNeedPermission = {
+                                pendingContactPayload = payload
+                                writeContactsLauncher.launch(Manifest.permission.WRITE_CONTACTS)
+                            }
+                        )
+                    },
+                    onOpenSystemContactsFallback = { num, name ->
+                        viewModel.openAddContact(num, name)
+                    }
                 )
             }
         }

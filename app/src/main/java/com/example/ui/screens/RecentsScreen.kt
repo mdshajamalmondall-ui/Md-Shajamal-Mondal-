@@ -30,7 +30,6 @@ import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dialpad
@@ -172,13 +171,14 @@ fun RecentsScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             // Filter Pills
-            val filters = listOf(
-                CallFilterType.ALL to strings.filterAll,
-                CallFilterType.MISSED to strings.filterMissed,
-                CallFilterType.BRILLIANT to strings.filterBrilliant,
-                CallFilterType.OUTGOING to strings.filterOutgoing,
-                CallFilterType.INCOMING to strings.filterIncoming
-            )
+            val filters = remember(strings) {
+                listOf(
+                    CallFilterType.ALL to strings.filterAll,
+                    CallFilterType.MISSED to strings.filterMissed,
+                    CallFilterType.OUTGOING to strings.filterOutgoing,
+                    CallFilterType.INCOMING to strings.filterIncoming
+                )
+            }
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 2.dp)
@@ -195,19 +195,9 @@ fun RecentsScreen(
                                 style = MaterialTheme.typography.labelMedium
                             )
                         },
-                        leadingIcon = if (filter == CallFilterType.BRILLIANT) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Filled.Bolt,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        } else null,
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = if (filter == CallFilterType.BRILLIANT) nova.brilliantContainer else MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = if (filter == CallFilterType.BRILLIANT) nova.brilliant else MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedLeadingIconColor = nova.brilliant
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     )
                 }
@@ -517,8 +507,7 @@ private fun CallLogCard(
                         RouteBadge(
                             route = item.route,
                             sim1Label = sim1Label,
-                            sim2Label = sim2Label,
-                            brilliantLabel = strings.brilliantShort
+                            sim2Label = sim2Label
                         )
                     }
                     if (!noteText.isNullOrBlank()) {
@@ -532,27 +521,20 @@ private fun CallLogCard(
                         )
                     }
                 }
-                // Quick Direct Call button using the same route used in the log!
-                val quickBg = when (item.route) {
-                    CallRoute.SIM_1 -> nova.sim1Container
-                    CallRoute.SIM_2 -> nova.sim2Container
-                    CallRoute.BRILLIANT -> nova.brilliantContainer
-                }
-                val quickTint = when (item.route) {
-                    CallRoute.SIM_1 -> nova.sim1
-                    CallRoute.SIM_2 -> nova.sim2
-                    CallRoute.BRILLIANT -> nova.brilliant
-                }
+                // Quick Direct Call button using SIM 1 or SIM 2
+                val safeRoute = if (item.route == CallRoute.SIM_2) CallRoute.SIM_2 else CallRoute.SIM_1
+                val quickBg = if (safeRoute == CallRoute.SIM_2) nova.sim2Container else nova.sim1Container
+                val quickTint = if (safeRoute == CallRoute.SIM_2) nova.sim2 else nova.sim1
                 Box(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
                         .background(quickBg)
-                        .clickable { onCallRoute(item.route) },
+                        .clickable { onCallRoute(safeRoute) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (item.route == CallRoute.BRILLIANT) Icons.Filled.Bolt else Icons.Filled.Call,
+                        imageVector = Icons.Filled.Call,
                         contentDescription = strings.call,
                         tint = quickTint,
                         modifier = Modifier.size(20.dp)
@@ -574,12 +556,6 @@ private fun CallLogCard(
                             label = "SIM 1",
                             tint = nova.sim1,
                             onClick = { onCallRoute(CallRoute.SIM_1) }
-                        )
-                        ExpandedActionPill(
-                            icon = Icons.Filled.Bolt,
-                            label = strings.brilliantShort,
-                            tint = nova.brilliant,
-                            onClick = { onCallRoute(CallRoute.BRILLIANT) }
                         )
                         ExpandedActionPill(
                             icon = Icons.Filled.SimCard,

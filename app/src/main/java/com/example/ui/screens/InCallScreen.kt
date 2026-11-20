@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AddIcCall
@@ -70,6 +72,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -141,28 +145,64 @@ fun InCallScreen(
 
     val anim = rememberInfiniteTransition(label = "incall_anim")
     val ringWave1 by anim.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.55f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        initialValue = 0.88f,
+        targetValue = 1.72f,
+        animationSpec = infiniteRepeatable(tween(1650, easing = FastOutSlowInEasing), RepeatMode.Restart),
         label = "ring_wave_1"
     )
     val ringWave1Alpha by anim.animateFloat(
-        initialValue = 0.45f,
+        initialValue = 0.52f,
         targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(tween(1650, easing = FastOutSlowInEasing), RepeatMode.Restart),
         label = "ring_wave_1_alpha"
     )
     val ringWave2 by anim.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.55f,
-        animationSpec = infiniteRepeatable(tween(1500, delayMillis = 550, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        initialValue = 0.88f,
+        targetValue = 1.72f,
+        animationSpec = infiniteRepeatable(tween(1650, delayMillis = 550, easing = FastOutSlowInEasing), RepeatMode.Restart),
         label = "ring_wave_2"
     )
     val ringWave2Alpha by anim.animateFloat(
-        initialValue = 0.35f,
+        initialValue = 0.42f,
         targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(1500, delayMillis = 550, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(tween(1650, delayMillis = 550, easing = FastOutSlowInEasing), RepeatMode.Restart),
         label = "ring_wave_2_alpha"
+    )
+    val ringWave3 by anim.animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.72f,
+        animationSpec = infiniteRepeatable(tween(1650, delayMillis = 1100, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        label = "ring_wave_3"
+    )
+    val ringWave3Alpha by anim.animateFloat(
+        initialValue = 0.34f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(1650, delayMillis = 1100, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        label = "ring_wave_3_alpha"
+    )
+    val orbitAngle by anim.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart),
+        label = "orbit_angle"
+    )
+    val avatarPulse by anim.animateFloat(
+        initialValue = 0.98f,
+        targetValue = 1.055f,
+        animationSpec = infiniteRepeatable(tween(820, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "avatar_pulse"
+    )
+    val orbDrift by anim.animateFloat(
+        initialValue = -0.06f,
+        targetValue = 0.06f,
+        animationSpec = infiniteRepeatable(tween(3600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "orb_drift"
+    )
+    val chevronPhase by anim.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart),
+        label = "chevron_phase"
     )
     val statusDotAlpha by anim.animateFloat(
         initialValue = 0.3f,
@@ -171,13 +211,14 @@ fun InCallScreen(
         label = "status_dot_alpha"
     )
 
-    val isRingingOrDialing = callState.phase == ActiveCallPhase.RINGING ||
-        callState.phase == ActiveCallPhase.CONNECTING ||
+    val isIncoming = callState.phase == ActiveCallPhase.RINGING
+    val isOutgoing = callState.phase == ActiveCallPhase.CONNECTING ||
         callState.phase == ActiveCallPhase.OUTGOING_RINGING
+    val isRingingOrDialing = isIncoming || isOutgoing
 
     val statusText = when (callState.phase) {
         ActiveCallPhase.RINGING -> if (isBn) "ইনকামিং কল আসছে..." else "Incoming call..."
-        ActiveCallPhase.CONNECTING -> if (isBn) "কল সংযোগ হচ্ছে..." else "Connecting..."
+        ActiveCallPhase.CONNECTING -> if (isBn) "কল যাচ্ছে..." else "Calling..."
         ActiveCallPhase.OUTGOING_RINGING -> if (isBn) "রিং হচ্ছে..." else "Ringing..."
         ActiveCallPhase.ACTIVE -> String.format("%02d:%02d", elapsedSec / 60, elapsedSec % 60)
         ActiveCallPhase.HOLDING -> if (isBn) "কল হোল্ডে আছে" else "On Hold"
@@ -187,7 +228,7 @@ fun InCallScreen(
 
     val statusColor = when (callState.phase) {
         ActiveCallPhase.ACTIVE -> nova.sim1
-        ActiveCallPhase.OUTGOING_RINGING -> nova.gold
+        ActiveCallPhase.OUTGOING_RINGING, ActiveCallPhase.CONNECTING -> nova.gold
         ActiveCallPhase.RINGING -> if (callState.isSpamCaller) nova.missed else nova.sim1
         else -> nova.gold
     }
@@ -209,34 +250,39 @@ fun InCallScreen(
             .fillMaxSize()
             .background(callBackgroundBrush)
             .drawBehind {
+                val topOrbColor = when {
+                    callState.isSpamCaller -> nova.missed
+                    isOutgoing -> nova.gold
+                    else -> nova.sim1
+                }
                 drawCircle(
                     brush = Brush.radialGradient(
                         listOf(
-                            (if (callState.isSpamCaller) nova.missed else nova.sim1).copy(alpha = 0.28f),
+                            topOrbColor.copy(alpha = 0.28f),
                             Color.Transparent
                         ),
-                        center = Offset(size.width * 0.5f, size.height * 0.22f),
-                        radius = size.width * 0.78f
+                        center = Offset(size.width * (0.5f + orbDrift), size.height * 0.22f),
+                        radius = size.width * 0.80f
                     )
                 )
                 drawCircle(
                     brush = Brush.radialGradient(
                         listOf(
-                            nova.brilliant.copy(alpha = 0.24f),
+                            nova.sim2.copy(alpha = 0.24f),
                             Color.Transparent
                         ),
-                        center = Offset(size.width * 0.85f, size.height * 0.62f),
-                        radius = size.width * 0.65f
+                        center = Offset(size.width * (0.84f - orbDrift), size.height * 0.58f),
+                        radius = size.width * 0.68f
                     )
                 )
                 drawCircle(
                     brush = Brush.radialGradient(
                         listOf(
-                            nova.sim2.copy(alpha = 0.20f),
+                            nova.sim1.copy(alpha = 0.20f),
                             Color.Transparent
                         ),
-                        center = Offset(size.width * 0.18f, size.height * 0.82f),
-                        radius = size.width * 0.62f
+                        center = Offset(size.width * (0.16f + orbDrift), size.height * 0.82f),
+                        radius = size.width * 0.64f
                     )
                 )
             }
@@ -258,24 +304,46 @@ fun InCallScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = nova.brilliantContainer,
-                    border = BorderStroke(1.dp, nova.brilliant.copy(alpha = 0.55f))
+                    color = nova.goldContainer.copy(alpha = 0.85f),
+                    border = BorderStroke(1.dp, nova.gold.copy(alpha = 0.6f))
                 ) {
-                    Text(
-                        text = "Shajamal • ${callState.lineLabel}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = nova.brilliant,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .alpha(statusDotAlpha)
+                                .clip(CircleShape)
+                                .background(statusColor)
+                        )
+                        Text(
+                            text = "Shajamal • ${callState.lineLabel}",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = nova.gold
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(22.dp))
 
-                Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.size(164.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     if (isRingingOrDialing) {
-                        val rippleColor = if (callState.isSpamCaller) nova.missed
-                        else if (callState.phase == ActiveCallPhase.RINGING) nova.sim1
-                        else nova.gold
+                        val rippleColor = when {
+                            callState.isSpamCaller -> nova.missed
+                            isIncoming -> nova.sim1
+                            else -> nova.gold
+                        }
+                        val secondaryArcColor = when {
+                            callState.isSpamCaller -> Color(0xFFFF8A80)
+                            isIncoming -> Color(0xFF69F0AE)
+                            else -> nova.sim2
+                        }
                         Box(
                             modifier = Modifier
                                 .size(112.dp)
@@ -292,15 +360,54 @@ fun InCallScreen(
                                 .clip(CircleShape)
                                 .background(rippleColor)
                         )
+                        Box(
+                            modifier = Modifier
+                                .size(112.dp)
+                                .scale(ringWave3)
+                                .alpha(ringWave3Alpha)
+                                .clip(CircleShape)
+                                .background(secondaryArcColor)
+                        )
+                        // Rotating luminous orbital halo arc around avatar
+                        Canvas(modifier = Modifier.size(134.dp)) {
+                            val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                            drawArc(
+                                color = rippleColor.copy(alpha = 0.92f),
+                                startAngle = orbitAngle,
+                                sweepAngle = 110f,
+                                useCenter = false,
+                                style = stroke
+                            )
+                            drawArc(
+                                color = secondaryArcColor.copy(alpha = 0.72f),
+                                startAngle = orbitAngle + 180f,
+                                sweepAngle = 80f,
+                                useCenter = false,
+                                style = stroke
+                            )
+                        }
+                    } else if (callState.phase == ActiveCallPhase.ACTIVE) {
+                        Box(
+                            modifier = Modifier
+                                .size(122.dp)
+                                .scale(avatarPulse)
+                                .alpha(0.24f)
+                                .clip(CircleShape)
+                                .background(nova.sim1)
+                        )
                     }
-                    ContactAvatar(
-                        name = callState.displayName,
-                        photoUri = callState.photoUri,
-                        size = 104.dp
-                    )
+                    Box(
+                        modifier = Modifier.scale(if (isRingingOrDialing) avatarPulse else 1f)
+                    ) {
+                        ContactAvatar(
+                            name = callState.displayName,
+                            photoUri = callState.photoUri,
+                            size = 104.dp
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = callState.displayName.ifBlank { formatDisplayNumber(callState.number) },
@@ -356,28 +463,50 @@ fun InCallScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Animated Status Pill with Signal Wave Equalizer & Directional Outgoing Chevrons
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = statusColor.copy(alpha = if (isRingingOrDialing) 0.16f else 0.10f),
+                    border = BorderStroke(1.dp, statusColor.copy(alpha = if (isRingingOrDialing) 0.55f else 0.30f))
                 ) {
-                    if (isRingingOrDialing) {
-                        Box(
-                            modifier = Modifier
-                                .size(9.dp)
-                                .alpha(statusDotAlpha)
-                                .clip(CircleShape)
-                                .background(statusColor)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (isRingingOrDialing || callState.phase == ActiveCallPhase.ACTIVE) {
+                            AnimatedCallWaveBars(
+                                color = statusColor,
+                                activeSpeed = if (isIncoming) 420 else if (isOutgoing) 520 else 720
+                            )
+                        }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp
+                            ),
+                            color = statusColor,
+                            modifier = Modifier.testTag("incall_status_text")
                         )
+                        if (isOutgoing) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy((-6).dp)
+                            ) {
+                                for (i in 0..2) {
+                                    val dist = kotlin.math.abs(chevronPhase - i)
+                                    val alpha = (1f - (dist / 1.4f)).coerceIn(0.22f, 1f)
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = statusColor.copy(alpha = alpha),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.7.sp
-                        ),
-                        color = statusColor,
-                        modifier = Modifier.testTag("incall_status_text")
-                    )
                 }
 
                 // Live Recording Indicator / Saved Toast Pill
@@ -843,16 +972,26 @@ private fun IncomingCallAnimatedControls(
                         )
                     }
             ) {
-                // Animated floating upward arrow hint
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowUp,
-                    contentDescription = null,
-                    tint = nova.sim1,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .offset(y = floatOffset.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+                // Stacked double animated floating upward arrows
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.offset(y = floatOffset.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = null,
+                        tint = nova.sim1.copy(alpha = 0.55f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = null,
+                        tint = nova.sim1,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .offset(y = (-8).dp)
+                    )
+                }
                 Box(contentAlignment = Alignment.Center) {
                     Box(
                         modifier = Modifier
@@ -964,5 +1103,53 @@ private fun InCallControlButton(
             color = if (active) resolvedActiveBg else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
+    }
+}
+
+@Composable
+private fun AnimatedCallWaveBars(
+    color: Color,
+    activeSpeed: Int
+) {
+    val transition = rememberInfiniteTransition(label = "call_wave_bars")
+    val bar1 by transition.animateFloat(
+        initialValue = 0.30f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(activeSpeed, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bar1"
+    )
+    val bar2 by transition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 0.25f,
+        animationSpec = infiniteRepeatable(tween((activeSpeed * 1.15f).toInt(), easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bar2"
+    )
+    val bar3 by transition.animateFloat(
+        initialValue = 0.40f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween((activeSpeed * 0.85f).toInt(), easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bar3"
+    )
+    val bar4 by transition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 0.30f,
+        animationSpec = infiniteRepeatable(tween((activeSpeed * 1.05f).toInt(), easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bar4"
+    )
+    val heights = listOf(bar1, bar2, bar3, bar4)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier.height(16.dp)
+    ) {
+        heights.forEach { frac ->
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height((16f * frac).dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(color)
+            )
+        }
     }
 }

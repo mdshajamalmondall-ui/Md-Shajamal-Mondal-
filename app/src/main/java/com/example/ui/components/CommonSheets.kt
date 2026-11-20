@@ -18,17 +18,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -135,10 +132,10 @@ fun CallerDetailBottomSheet(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Triple-Line Call Row
+            // Dual-SIM Call Row (SIM 1 & SIM 2)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 SheetCallButton(
                     icon = Icons.Filled.Call,
@@ -151,18 +148,6 @@ fun CallerDetailBottomSheet(
                         onCallRoute(CallRoute.SIM_1)
                     },
                     modifier = Modifier.weight(1f)
-                )
-                SheetCallButton(
-                    icon = Icons.Filled.Bolt,
-                    label = strings.brilliantShort,
-                    sub = "VoIP",
-                    fg = Color.White,
-                    bg = nova.brilliant,
-                    onClick = {
-                        onDismiss()
-                        onCallRoute(CallRoute.BRILLIANT)
-                    },
-                    modifier = Modifier.weight(1.1f)
                 )
                 SheetCallButton(
                     icon = Icons.Filled.SimCard,
@@ -316,17 +301,6 @@ fun ChooseLineBottomSheet(
                 onClick = {
                     onDismiss()
                     onSelectRoute(CallRoute.SIM_2)
-                }
-            )
-            RouteOptionRow(
-                icon = Icons.Filled.Bolt,
-                title = strings.brilliant,
-                subtitle = if (state.brilliantStatus.isInstalled) strings.brilliantConnected else strings.brilliantNotInstalled,
-                accent = nova.brilliant,
-                container = nova.brilliantContainer,
-                onClick = {
-                    onDismiss()
-                    onSelectRoute(CallRoute.BRILLIANT)
                 }
             )
         }
@@ -631,9 +605,9 @@ fun SpeedDialAssignDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
-                        selected = route == CallRoute.SIM_1,
+                        selected = route != CallRoute.SIM_2,
                         onClick = { route = CallRoute.SIM_1 },
                         label = { Text("SIM 1") }
                     )
@@ -641,11 +615,6 @@ fun SpeedDialAssignDialog(
                         selected = route == CallRoute.SIM_2,
                         onClick = { route = CallRoute.SIM_2 },
                         label = { Text("SIM 2") }
-                    )
-                    FilterChip(
-                        selected = route == CallRoute.BRILLIANT,
-                        onClick = { route = CallRoute.BRILLIANT },
-                        label = { Text(strings.brilliantShort) }
                     )
                 }
             }
@@ -669,51 +638,6 @@ fun SpeedDialAssignDialog(
                     }) { Text(strings.delete) }
                 }
                 TextButton(onClick = onDismiss) { Text(strings.cancel) }
-            }
-        }
-    )
-}
-
-@Composable
-fun BrilliantNotInstalledDialog(
-    packageName: String,
-    language: AppLanguage,
-    strings: NovaStrings,
-    onDismiss: () -> Unit,
-    onInstallClick: () -> Unit,
-    onOpenSettingsClick: () -> Unit
-) {
-    val nova = LocalNovaColors.current
-    val body = if (language == AppLanguage.BENGALI) {
-        "এই ফোনে Brilliant Connect ($packageName) অ্যাপটি পাওয়া যায়নি।\n\nব্রিলিয়ান্ট থেকে সরাসরি কল করার জন্য প্লে স্টোর থেকে Brilliant Connect ইনস্টল করুন, অথবা আপনার ফোনে ভিন্ন প্যাকেজ থাকলে ব্রিলিয়ান্ট সেটিংস থেকে প্যাকেজ নাম আপডেট করুন।"
-    } else {
-        "Brilliant Connect ($packageName) was not detected on this device.\n\nInstall Brilliant Connect from the Play Store to route VoIP calls directly from Shajamal, or adjust the package name in Brilliant Bridge Settings."
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Bolt, contentDescription = null, tint = nova.brilliant) },
-        title = { Text(strings.brilliantNotInstalled) },
-        text = { Text(body, style = MaterialTheme.typography.bodyMedium) },
-        confirmButton = {
-            Button(
-                onClick = {
-                    onDismiss()
-                    onInstallClick()
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = nova.brilliant, contentColor = Color.White)
-            ) {
-                Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(strings.installBrilliant)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = {
-                onDismiss()
-                onOpenSettingsClick()
-            }) {
-                Text(if (language == AppLanguage.BENGALI) "ব্রিজ সেটিংস" else "Bridge Settings")
             }
         }
     )

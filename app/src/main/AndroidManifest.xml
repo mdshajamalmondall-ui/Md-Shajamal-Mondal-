@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -23,8 +24,6 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <queries>
-        <package android:name="com.brilliant.connect.com.bd" />
-        <package android:name="com.brilliant.connect" />
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
         <intent>
@@ -38,10 +37,6 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="tel" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="sip" />
         </intent>
     </queries>
 

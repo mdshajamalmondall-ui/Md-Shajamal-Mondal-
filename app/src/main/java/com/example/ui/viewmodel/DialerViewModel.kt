@@ -26,8 +26,6 @@ import com.example.data.local.PreferencesRepository
 import com.example.data.local.SpeedDialEntity
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
-import com.example.data.model.BrilliantBridgeStatus
-import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallDirection
 import com.example.data.model.CallDispatchResult
 import com.example.data.model.CallFilterType
@@ -40,6 +38,7 @@ import com.example.data.model.SimCardInfo
 import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
 import com.example.data.telephony.CallNotificationHelper
+import com.example.data.telephony.NewContactPayload
 import com.example.data.telephony.TelephonyBridgeManager
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
@@ -59,6 +58,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -66,10 +66,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class NovaTab {
-    KEYPAD,
     RECENTS,
-    CONTACTS,
-    BRIDGE
+    KEYPAD,
+    CONTACTS
 }
 
 data class PermissionSnapshot(
@@ -108,7 +107,6 @@ data class DialerUiState(
     val preferences: UserPreferences = UserPreferences(),
     val permissions: PermissionSnapshot = PermissionSnapshot(),
     val simCards: List<SimCardInfo> = emptyList(),
-    val brilliantStatus: BrilliantBridgeStatus = BrilliantBridgeStatus(),
     val contacts: List<DeviceContact> = emptyList(),
     val callLogs: List<CallLogItem> = emptyList(),
     val speedDials: List<SpeedDialEntity> = emptyList(),
@@ -119,7 +117,6 @@ data class DialerUiState(
     val filteredCallLogs: List<CallLogItem> = emptyList(),
     val activeDialedNote: CallNoteEntity? = null,
     val isDialedBlocked: Boolean = false,
-    val suggestBrilliantForDialed: Boolean = false,
     val todayCallCount: Int = 0,
     val selectedCallerDetail: CallerDetailTarget? = null,
     val routePickerTarget: CallerDetailTarget? = null,
@@ -137,7 +134,6 @@ data class DialerUiState(
 
 sealed interface DialerUiEvent {
     data class ShowMessage(val text: String) : DialerUiEvent
-    data class PromptInstallBrilliant(val packageName: String) : DialerUiEvent
 }
 
 private data class LocalRoomSnapshot(
@@ -152,7 +148,6 @@ private data class SystemDataSnapshot(
     val permissions: PermissionSnapshot,
     val isDefaultDialer: Boolean,
     val simCards: List<SimCardInfo>,
-    val brilliantStatus: BrilliantBridgeStatus,
     val contacts: List<DeviceContact>,
     val systemCallLogs: List<CallLogItem>,
     val isLoading: Boolean
@@ -199,10 +194,9 @@ class DialerViewModel(
 
     private val systemSnapshot = MutableStateFlow(
         SystemDataSnapshot(
-            permissions = currentPermissions(),
-            isDefaultDialer = telephony.isDefaultDialer(),
+            permissions = PermissionSnapshot(),
+            isDefaultDialer = false,
             simCards = emptyList(),
-            brilliantStatus = BrilliantBridgeStatus(),
             contacts = emptyList(),
             systemCallLogs = emptyList(),
             isLoading = false
@@ -312,13 +306,6 @@ class DialerViewModel(
             it.normalizedNumber == normalizedDial ||
                 (normalizedDial.length >= 8 && it.normalizedNumber.endsWith(normalizedDial.takeLast(10)))
         }
-        val prefixes = room.preferences.brilliantSmartPrefixes
-            .split(",")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-        val suggestBrilliant = input.dialedDigits.isNotEmpty() &&
-            prefixes.any { prefix -> input.dialedDigits.startsWith(prefix) }
-
         val startOfDay = System.currentTimeMillis() - (24L * 60L * 60L * 1000L)
         val todayCount = mergedLogs.count { it.timestamp >= startOfDay }
 
@@ -332,7 +319,6 @@ class DialerViewModel(
             preferences = room.preferences,
             permissions = sys.permissions,
             simCards = sys.simCards,
-            brilliantStatus = sys.brilliantStatus,
             contacts = sys.contacts,
             callLogs = mergedLogs,
             speedDials = room.speedDials,
@@ -343,7 +329,6 @@ class DialerViewModel(
             filteredCallLogs = filteredLogs,
             activeDialedNote = matchedNote,
             isDialedBlocked = isBlocked,
-            suggestBrilliantForDialed = suggestBrilliant,
             todayCallCount = todayCount,
             selectedCallerDetail = input.selectedCallerDetail,
             routePickerTarget = input.routePickerTarget,
@@ -367,11 +352,11 @@ class DialerViewModel(
         }
         viewModelScope.launch {
             repository.preferences
-                .map { Triple(it.sim1Alias, it.sim2Alias, it.brilliantPackageName) }
+                .map { Pair(it.sim1Alias, it.sim2Alias) }
                 .distinctUntilChanged()
+                .drop(1)
                 .collect {
-                    val prefs = uiState.value.preferences
-                    refreshBridgeAndSims(prefs)
+                    refreshSimsOnly(uiState.value.preferences)
                 }
         }
     }
@@ -395,13 +380,14 @@ class DialerViewModel(
 
     fun refreshSystemData(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (!force && (refreshJob?.isActive == true || now - lastSystemRefreshMs < 1_500L)) {
-            // Still quickly update lightweight flags (permissions / default dialer) without re-querying DB
-            val perms = currentPermissions()
-            val isDef = telephony.isDefaultDialer()
-            val cur = systemSnapshot.value
-            if (cur.permissions != perms || cur.isDefaultDialer != isDef) {
-                systemSnapshot.value = cur.copy(permissions = perms, isDefaultDialer = isDef)
+        if (!force && (refreshJob?.isActive == true || now - lastSystemRefreshMs < 2_000L)) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val perms = currentPermissions()
+                val isDef = telephony.isDefaultDialer()
+                val cur = systemSnapshot.value
+                if (cur.permissions != perms || cur.isDefaultDialer != isDef) {
+                    systemSnapshot.value = cur.copy(permissions = perms, isDefaultDialer = isDef)
+                }
             }
             return
         }
@@ -415,28 +401,27 @@ class DialerViewModel(
                 isDefaultDialer = isDef,
                 isLoading = systemSnapshot.value.systemCallLogs.isEmpty()
             )
+
+            // Phase 1: Load Recents FIRST without Binder contention so first screen appears instantly!
+            val logs = telephony.loadSystemCallLogs()
+            systemSnapshot.value = systemSnapshot.value.copy(
+                permissions = perms,
+                isDefaultDialer = isDef,
+                systemCallLogs = logs,
+                isLoading = false
+            )
+
+            // Phase 2: Load Dual-SIM info & Contacts in parallel right after Recents is already on screen
             val prefs = uiState.value.preferences
             coroutineScope {
-                val logsDeferred = async { telephony.loadSystemCallLogs() }
                 val simsDeferred = async { telephony.loadSimCards(prefs) }
-                val brilliantDeferred = async { telephony.inspectBrilliantBridge(prefs.brilliantPackageName) }
                 val contactsDeferred = async { telephony.loadDeviceContacts() }
-
-                // Emit call logs immediately so the Recents screen opens instantaneously!
-                val logs = logsDeferred.await()
-                systemSnapshot.value = systemSnapshot.value.copy(
-                    systemCallLogs = logs,
-                    isLoading = false
-                )
-
                 val sims = simsDeferred.await()
-                val brilliant = brilliantDeferred.await()
                 val contacts = contactsDeferred.await()
                 systemSnapshot.value = SystemDataSnapshot(
                     permissions = perms,
                     isDefaultDialer = isDef,
                     simCards = sims,
-                    brilliantStatus = brilliant,
                     contacts = contacts,
                     systemCallLogs = logs,
                     isLoading = false
@@ -445,18 +430,14 @@ class DialerViewModel(
         }
     }
 
-    private fun refreshBridgeAndSims(prefs: UserPreferences) {
+    private fun refreshSimsOnly(prefs: UserPreferences) {
         viewModelScope.launch(Dispatchers.IO) {
-            coroutineScope {
-                val simsDeferred = async { telephony.loadSimCards(prefs) }
-                val brilliantDeferred = async { telephony.inspectBrilliantBridge(prefs.brilliantPackageName) }
-                systemSnapshot.value = systemSnapshot.value.copy(
-                    permissions = currentPermissions(),
-                    isDefaultDialer = telephony.isDefaultDialer(),
-                    simCards = simsDeferred.await(),
-                    brilliantStatus = brilliantDeferred.await()
-                )
-            }
+            val sims = telephony.loadSimCards(prefs)
+            systemSnapshot.value = systemSnapshot.value.copy(
+                permissions = currentPermissions(),
+                isDefaultDialer = telephony.isDefaultDialer(),
+                simCards = sims
+            )
         }
     }
 
@@ -642,8 +623,6 @@ class DialerViewModel(
 
     fun openSystemDefaultAppsSettings() = telephony.openSystemDefaultAppsSettings()
 
-    fun openCallingAccountsSettings() = telephony.openCallingAccountsSettings()
-
     fun openSettings() {
         isSettingsOpen.value = true
     }
@@ -770,27 +749,19 @@ class DialerViewModel(
             ?: resolveContactName(numberToCall, state.contacts)
             ?: state.cloudCallerId.dialedLookup?.displayName
 
-        val result = when (route) {
-            CallRoute.SIM_1 -> telephony.placeSimCall(numberToCall, state.sim1)
+        val effectiveRoute = if (route == CallRoute.SIM_2) CallRoute.SIM_2 else CallRoute.SIM_1
+        val result = when (effectiveRoute) {
             CallRoute.SIM_2 -> telephony.placeSimCall(numberToCall, state.sim2)
-            CallRoute.BRILLIANT -> telephony.placeBrilliantCall(
-                rawNumber = numberToCall,
-                bridgeStatus = state.brilliantStatus,
-                prefs = state.preferences,
-                fallbackSim = state.sim1
-            )
+            else -> telephony.placeSimCall(numberToCall, state.sim1)
         }
 
         val isBn = state.preferences.language == AppLanguage.BENGALI
         when (result) {
             is CallDispatchResult.Dispatched -> {
                 viewModelScope.launch {
-                    repository.recordInAppCall(result.formattedNumber, resolvedName, route)
+                    repository.recordInAppCall(result.formattedNumber, resolvedName, effectiveRoute)
                 }
                 emitMessage(if (isBn) result.messageBn else result.messageEn)
-            }
-            is CallDispatchResult.BrilliantNotInstalled -> {
-                _events.tryEmit(DialerUiEvent.PromptInstallBrilliant(result.packageName))
             }
             is CallDispatchResult.InvalidNumber -> {
                 emitMessage(if (isBn) result.reasonBn else result.reasonEn)
@@ -798,30 +769,8 @@ class DialerViewModel(
             is CallDispatchResult.Error -> {
                 emitMessage(if (isBn) result.messageBn else result.messageEn)
             }
+            is CallDispatchResult.BrilliantNotInstalled -> Unit
         }
-    }
-
-    fun testBrilliantBridge() {
-        val state = uiState.value
-        val isBn = state.preferences.language == AppLanguage.BENGALI
-        if (state.brilliantStatus.isInstalled) {
-            val opened = telephony.openBrilliantApp(state.brilliantStatus.packageName)
-            emitMessage(
-                if (opened) {
-                    if (isBn) "ব্রিলিয়ান্ট কানেক্ট সফলভাবে সংযুক্ত ও চালু হয়েছে!"
-                    else "Brilliant Connect is connected and launched!"
-                } else {
-                    if (isBn) "ব্রিলিয়ান্ট অ্যাপ চালু করা যায়নি"
-                    else "Unable to launch Brilliant Connect"
-                }
-            )
-        } else {
-            _events.tryEmit(DialerUiEvent.PromptInstallBrilliant(state.brilliantStatus.packageName))
-        }
-    }
-
-    fun openPlayStoreForBrilliant(pkg: String = uiState.value.brilliantStatus.packageName) {
-        telephony.openPlayStoreForBrilliant(pkg)
     }
 
     fun openWhatsApp(number: String) {
@@ -838,6 +787,44 @@ class DialerViewModel(
 
     fun openAddContact(number: String, name: String = "") {
         telephony.openAddContact(number, name)
+    }
+
+    fun hasWriteContactsPermission(): Boolean {
+        return telephony.hasPermission(Manifest.permission.WRITE_CONTACTS)
+    }
+
+    fun saveContactWithPhoto(
+        payload: NewContactPayload,
+        onSaved: () -> Unit,
+        onNeedPermission: () -> Unit
+    ) {
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        if (!telephony.hasPermission(Manifest.permission.WRITE_CONTACTS)) {
+            onNeedPermission()
+            return
+        }
+        viewModelScope.launch {
+            val res = telephony.saveContactWithPhoto(payload)
+            res.onSuccess { savedName ->
+                emitMessage(
+                    if (isBn) "ছবি ও তথ্যসহ কন্টাক্ট সেভ হয়েছে: $savedName"
+                    else "Contact saved with photo & details: $savedName"
+                )
+                onSaved()
+                // Reload contacts immediately so new photo & name appear in Recents & Contacts
+                val updatedContacts = telephony.loadDeviceContacts()
+                systemSnapshot.value = systemSnapshot.value.copy(contacts = updatedContacts)
+            }.onFailure { err ->
+                if (err is SecurityException) {
+                    onNeedPermission()
+                } else {
+                    emitMessage(
+                        if (isBn) "কন্টাক্ট সেভ করা যায়নি: ${err.localizedMessage.orEmpty()}"
+                        else "Could not save contact: ${err.localizedMessage.orEmpty()}"
+                    )
+                }
+            }
+        }
     }
 
     fun copyNumber(number: String) {
@@ -904,48 +891,6 @@ class DialerViewModel(
             val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
             emitMessage(if (isBn) "কল হিস্ট্রি থেকে ডিলিট হয়েছে" else "Deleted from call history")
         }
-    }
-
-    fun updateBrilliantPackage(pkg: String) = viewModelScope.launch {
-        repository.updateBrilliantPackage(pkg.ifBlank { BrilliantBridgeStatus.DEFAULT_BRILLIANT_PACKAGE })
-    }
-
-    fun updateBrilliantLaunchMode(mode: BrilliantLaunchMode) = viewModelScope.launch {
-        repository.updateBrilliantLaunchMode(mode)
-    }
-
-    fun updateBrilliantAutoFormatBd(enabled: Boolean) = viewModelScope.launch {
-        repository.updateBrilliantAutoFormatBd(enabled)
-    }
-
-    fun updateBrilliantAutoCopy(enabled: Boolean) = viewModelScope.launch {
-        repository.updateBrilliantAutoCopy(enabled)
-    }
-
-    fun updateBrilliantSmartPrefixes(prefixes: String) = viewModelScope.launch {
-        repository.updateBrilliantSmartPrefixes(prefixes)
-    }
-
-    fun updateBrilliantExternalHandoff(enabled: Boolean) = viewModelScope.launch {
-        repository.updateBrilliantExternalHandoff(enabled)
-    }
-
-    fun updateBrilliantAccount(name: String, number: String) = viewModelScope.launch {
-        repository.updateBrilliantAccount(name, number)
-        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
-        emitMessage(
-            if (isBn) "ব্রিলিয়ান্ট অ্যাকাউন্ট সেভ হয়েছে"
-            else "Brilliant account saved"
-        )
-    }
-
-    fun updateBrilliantLinkedAccountId(accountId: String) = viewModelScope.launch {
-        repository.updateBrilliantLinkedAccountId(accountId)
-        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
-        emitMessage(
-            if (isBn) "ব্রিলিয়ান্ট কলিং অ্যাকাউন্ট লিংক হয়েছে"
-            else "Brilliant calling account linked"
-        )
     }
 
     fun updateDefaultRoute(route: DefaultRoutePreference) = viewModelScope.launch {
