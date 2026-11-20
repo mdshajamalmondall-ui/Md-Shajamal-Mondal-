@@ -28,6 +28,7 @@ import com.example.data.local.SpeedDialEntity
 import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
+import com.example.data.model.BackgroundDoodleStyle
 import com.example.data.model.CallDirection
 import com.example.data.model.CallDispatchResult
 import com.example.data.model.CallFilterType
@@ -952,19 +953,22 @@ class DialerViewModel(
     }
 
     fun deleteCallLogItem(item: CallLogItem) {
-        hiddenCallLogIds.value = hiddenCallLogIds.value + item.id
-        if (item.id.startsWith("sys_")) {
+        val idsToDelete = (item.groupedIds + item.id).distinct().toSet()
+        hiddenCallLogIds.value = hiddenCallLogIds.value + idsToDelete
+        if (idsToDelete.any { it.startsWith("sys_") }) {
             systemSnapshot.value = systemSnapshot.value.copy(
-                systemCallLogs = systemSnapshot.value.systemCallLogs.filterNot { it.id == item.id }
+                systemCallLogs = systemSnapshot.value.systemCallLogs.filterNot { it.id in idsToDelete }
             )
         }
         viewModelScope.launch {
-            if (item.id.startsWith("local_")) {
-                item.id.removePrefix("local_").toLongOrNull()?.let { localId ->
-                    repository.deleteLocalCallRecord(localId)
+            idsToDelete.forEach { entryId ->
+                if (entryId.startsWith("local_")) {
+                    entryId.removePrefix("local_").toLongOrNull()?.let { localId ->
+                        repository.deleteLocalCallRecord(localId)
+                    }
+                } else if (entryId.startsWith("sys_")) {
+                    telephony.deleteSystemCallLog(entryId.removePrefix("sys_"))
                 }
-            } else if (item.id.startsWith("sys_")) {
-                telephony.deleteSystemCallLog(item.id.removePrefix("sys_"))
             }
             val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
             emitMessage(if (isBn) "কল হিস্ট্রি থেকে ডিলিট হয়েছে" else "Deleted from call history")
@@ -1003,6 +1007,10 @@ class DialerViewModel(
 
     fun updateThemePalette(palette: AppThemePalette) = viewModelScope.launch {
         repository.updateThemePalette(palette)
+    }
+
+    fun updateBackgroundDoodle(style: BackgroundDoodleStyle) = viewModelScope.launch {
+        repository.updateBackgroundDoodle(style)
     }
 
     fun updateLanguage(language: AppLanguage) = viewModelScope.launch {
@@ -1209,7 +1217,7 @@ class DialerViewModel(
         }
         return (filteredLocal + enrichedSystemLogs)
             .sortedByDescending { it.timestamp }
-            .take(120)
+            .take(250)
     }
 
     private fun buildFavoritesList(
@@ -1258,13 +1266,52 @@ class DialerViewModel(
             CallFilterType.INCOMING -> logs.filter { it.direction == CallDirection.INCOMING }
         }
         val q = query.trim()
-        if (q.isEmpty()) return byFilter
-        val normQ = normalizePhoneNumber(q)
-        return byFilter.filter { item ->
-            (item.contactName?.contains(q, ignoreCase = true) == true) ||
-                item.number.contains(q, ignoreCase = true) ||
-                (normQ.isNotEmpty() && item.normalizedNumber.contains(normQ))
+        val matched = if (q.isEmpty()) {
+            byFilter
+        } else {
+            val normQ = normalizePhoneNumber(q)
+            byFilter.filter { item ->
+                (item.contactName?.contains(q, ignoreCase = true) == true) ||
+                    item.number.contains(q, ignoreCase = true) ||
+                    (normQ.isNotEmpty() && item.normalizedNumber.contains(normQ))
+            }
         }
+        return groupCallLogsByNumber(matched)
+    }
+
+    private fun groupCallLogsByNumber(logs: List<CallLogItem>): List<CallLogItem> {
+        if (logs.isEmpty()) return emptyList()
+        val grouped = LinkedHashMap<String, MutableList<CallLogItem>>(logs.size)
+        for (item in logs) {
+            val key = when {
+                item.normalizedNumber.length >= 8 -> item.normalizedNumber.takeLast(10)
+                item.normalizedNumber.isNotBlank() -> item.normalizedNumber
+                item.number.isNotBlank() -> item.number.trim()
+                else -> item.id
+            }
+            grouped.getOrPut(key) { ArrayList(4) }.add(item)
+        }
+        val result = ArrayList<CallLogItem>(grouped.size)
+        for (entries in grouped.values) {
+            val latest = entries.first()
+            if (entries.size == 1) {
+                result.add(latest.copy(callCount = 1, groupedIds = listOf(latest.id)))
+            } else {
+                val bestName = latest.contactName?.takeIf { it.isNotBlank() }
+                    ?: entries.firstOrNull { !it.contactName.isNullOrBlank() }?.contactName
+                val bestPhoto = latest.photoUri?.takeIf { it.isNotBlank() }
+                    ?: entries.firstOrNull { !it.photoUri.isNullOrBlank() }?.photoUri
+                result.add(
+                    latest.copy(
+                        contactName = bestName,
+                        photoUri = bestPhoto,
+                        callCount = entries.size,
+                        groupedIds = entries.map { it.id }
+                    )
+                )
+            }
+        }
+        return result
     }
 
     private fun filterContacts(query: String, contacts: List<DeviceContact>): List<DeviceContact> {

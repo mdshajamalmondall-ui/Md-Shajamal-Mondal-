@@ -133,9 +133,9 @@ jobs:
           RELEASE_NOTES="Tap Shajamal.apk below to download and install directly on your Android phone.
 
           Latest updates:
-          - 3x-5x Faster Startup & Buttery-Smooth 60fps UI (non-debuggable release-speed build, off-main Firestore init, memoized ViewModel state, downsized Coil contact thumbnails & SQLite QUERY_ARG_LIMIT)
-          - Removed repeated Permission prompt banner on launch (Recents & Contacts open clean and directly)
-          - Liquid Glass Call Screen, Incoming Slide to Answer + Message + Reminder, Favorites Tab, Display Options, A-Z Contacts + Voice Search, Circular Keypad & Truecaller Caller ID"
+          - Grouped Recents Call History with Call Counter: Repeated calls to/from the same number now appear in a single clean row with the exact call count badge like (2), (10), (15), (20) right next to the name
+          - 10 Rich Color Themes (added Sunset Gold, Midnight Rose, Cyber Indigo, and Mint Breeze Light) + 6 Lightweight Vector Theme Doodle Backgrounds (Phone Doodle, Cosmic Stars, Floral Leaves, Geometric Waves, Hearts & Sparkle, Off)
+          - 3x-5x Faster Startup & Buttery-Smooth 60fps UI with Liquid Glass Call Screen, Favorites Tab, Display Options, A-Z Contacts & Truecaller Caller ID"
 
           if gh release view latest-apk >/dev/null 2>&1; then
             gh release upload latest-apk Shajamal.apk --clobber

@@ -592,7 +592,7 @@ class TelephonyBridgeManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     suspend fun loadSystemCallLogs(): List<CallLogItem> = withContext(Dispatchers.IO) {
         if (!hasPermission(Manifest.permission.READ_CALL_LOG)) return@withContext emptyList()
-        val items = ArrayList<CallLogItem>(80)
+        val items = ArrayList<CallLogItem>(200)
 
         val projection = arrayOf(
             CallLog.Calls._ID,
@@ -609,7 +609,7 @@ class TelephonyBridgeManager(private val context: Context) {
             val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val queryArgs = Bundle().apply {
                     putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "${CallLog.Calls.DATE} DESC")
-                    putInt(ContentResolver.QUERY_ARG_LIMIT, 80)
+                    putInt(ContentResolver.QUERY_ARG_LIMIT, 200)
                 }
                 context.contentResolver.query(CallLog.Calls.CONTENT_URI, projection, queryArgs, null)
             } else {
@@ -632,7 +632,7 @@ class TelephonyBridgeManager(private val context: Context) {
                 val acctIdIdx = cursor.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_ID)
 
                 var count = 0
-                while (cursor.moveToNext() && count < 80) {
+                while (cursor.moveToNext() && count < 200) {
                     count++
                     val number = if (numIdx >= 0) cursor.getString(numIdx).orEmpty() else ""
                     val normalized = normalizePhoneNumber(number)

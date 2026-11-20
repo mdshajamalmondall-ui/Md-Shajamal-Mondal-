@@ -64,6 +64,9 @@ private val EmeraldExtendedColors = buildDarkExtended(EmeraldSurfaceElevated, Em
 private val AmethystExtendedColors = buildDarkExtended(AmethystSurfaceElevated, AmethystOutline, AmethystPrimary)
 private val OceanExtendedColors = buildDarkExtended(OceanSurfaceElevated, OceanOutline, OceanPrimary)
 private val CrimsonExtendedColors = buildDarkExtended(CrimsonSurfaceElevated, CrimsonOutline, CrimsonPrimary)
+private val SunsetExtendedColors = buildDarkExtended(SunsetSurfaceElevated, SunsetOutline, SunsetPrimary)
+private val MidnightRoseExtendedColors = buildDarkExtended(MidnightRoseSurfaceElevated, MidnightRoseOutline, MidnightRosePrimary)
+private val CyberIndigoExtendedColors = buildDarkExtended(CyberIndigoSurfaceElevated, CyberIndigoOutline, CyberIndigoPrimary)
 
 private val LightExtendedColors = NovaExtendedColors(
     sim1 = Sim1EmeraldLight,
@@ -81,6 +84,13 @@ private val LightExtendedColors = NovaExtendedColors(
     glassSurface = PearlSurface,
     glassBorder = PearlOutline,
     isDark = false
+)
+
+private val MintLightExtendedColors = LightExtendedColors.copy(
+    gold = MintLightPrimary,
+    goldContainer = MintLightContainer,
+    glassSurface = MintSurface,
+    glassBorder = MintOutline
 )
 
 val LocalNovaColors = staticCompositionLocalOf { SapphireExtendedColors }
@@ -180,6 +190,39 @@ private val CrimsonColorScheme = buildDarkScheme(
     outlineSubtle = CrimsonOutlineSubtle
 )
 
+private val SunsetColorScheme = buildDarkScheme(
+    primary = SunsetPrimary,
+    primaryContainer = SunsetPrimaryContainer,
+    bg = SunsetBg,
+    surface = SunsetSurface,
+    surfaceElevated = SunsetSurfaceElevated,
+    surfaceHighest = SunsetSurfaceHighest,
+    outline = SunsetOutline,
+    outlineSubtle = SunsetOutlineSubtle
+)
+
+private val MidnightRoseColorScheme = buildDarkScheme(
+    primary = MidnightRosePrimary,
+    primaryContainer = MidnightRosePrimaryContainer,
+    bg = MidnightRoseBg,
+    surface = MidnightRoseSurface,
+    surfaceElevated = MidnightRoseSurfaceElevated,
+    surfaceHighest = MidnightRoseSurfaceHighest,
+    outline = MidnightRoseOutline,
+    outlineSubtle = MidnightRoseOutlineSubtle
+)
+
+private val CyberIndigoColorScheme = buildDarkScheme(
+    primary = CyberIndigoPrimary,
+    primaryContainer = CyberIndigoPrimaryContainer,
+    bg = CyberIndigoBg,
+    surface = CyberIndigoSurface,
+    surfaceElevated = CyberIndigoSurfaceElevated,
+    surfaceHighest = CyberIndigoSurfaceHighest,
+    outline = CyberIndigoOutline,
+    outlineSubtle = CyberIndigoOutlineSubtle
+)
+
 private val LightColorScheme = lightColorScheme(
     primary = GoldLightPrimary,
     onPrimary = Color.White,
@@ -211,6 +254,37 @@ private val LightColorScheme = lightColorScheme(
     onErrorContainer = Color(0xFF540610)
 )
 
+private val MintLightColorScheme = lightColorScheme(
+    primary = MintLightPrimary,
+    onPrimary = Color.White,
+    primaryContainer = MintLightContainer,
+    onPrimaryContainer = Color(0xFF043827),
+    secondary = Sim2AzureLight,
+    onSecondary = Color.White,
+    secondaryContainer = Sim2AzureContainerLight,
+    onSecondaryContainer = Color(0xFF0A3263),
+    tertiary = Sim1EmeraldLight,
+    onTertiary = Color.White,
+    tertiaryContainer = Sim1EmeraldContainerLight,
+    onTertiaryContainer = Color(0xFF053825),
+    background = MintBg,
+    onBackground = TextPrimaryLight,
+    surface = MintSurface,
+    onSurface = TextPrimaryLight,
+    surfaceVariant = MintSurfaceElevated,
+    onSurfaceVariant = TextSecondaryLight,
+    surfaceContainerLowest = MintSurface,
+    surfaceContainerLow = MintBg,
+    surfaceContainer = MintSurfaceElevated,
+    surfaceContainerHigh = MintSurfaceHighest,
+    outline = MintOutline,
+    outlineVariant = Color(0xFFD5EDE3),
+    error = MissedCoralLight,
+    onError = Color.White,
+    errorContainer = MissedCoralContainerLight,
+    onErrorContainer = Color(0xFF540610)
+)
+
 @Composable
 fun NovaCallTheme(
     darkTheme: Boolean = true,
@@ -227,11 +301,11 @@ fun NovaCallTheme(
         DisplayThemeMode.DARK -> true
     }
     val resolvedPalette = when {
-        !effectiveDark -> AppThemePalette.PEARL_WHITE
-        themePalette != null && themePalette != AppThemePalette.PEARL_WHITE -> themePalette
+        !effectiveDark -> if (themePalette?.isLightPalette == true) themePalette else AppThemePalette.PEARL_WHITE
+        themePalette != null && !themePalette.isLightPalette -> themePalette
         else -> AppThemePalette.ROYAL_SAPPHIRE
     }
-    val isDark = resolvedPalette != AppThemePalette.PEARL_WHITE
+    val isDark = !resolvedPalette.isLightPalette
 
     val colorScheme = when (resolvedPalette) {
         AppThemePalette.ROYAL_SAPPHIRE -> SapphireColorScheme
@@ -239,7 +313,11 @@ fun NovaCallTheme(
         AppThemePalette.ROYAL_AMETHYST -> AmethystColorScheme
         AppThemePalette.OCEAN_TEAL -> OceanColorScheme
         AppThemePalette.CRIMSON_VELVET -> CrimsonColorScheme
+        AppThemePalette.SUNSET_AMBER -> SunsetColorScheme
+        AppThemePalette.MIDNIGHT_ROSE -> MidnightRoseColorScheme
+        AppThemePalette.CYBER_INDIGO -> CyberIndigoColorScheme
         AppThemePalette.PEARL_WHITE -> LightColorScheme
+        AppThemePalette.MINT_BREEZE -> MintLightColorScheme
     }
     val extendedColors = when (resolvedPalette) {
         AppThemePalette.ROYAL_SAPPHIRE -> SapphireExtendedColors
@@ -247,7 +325,11 @@ fun NovaCallTheme(
         AppThemePalette.ROYAL_AMETHYST -> AmethystExtendedColors
         AppThemePalette.OCEAN_TEAL -> OceanExtendedColors
         AppThemePalette.CRIMSON_VELVET -> CrimsonExtendedColors
+        AppThemePalette.SUNSET_AMBER -> SunsetExtendedColors
+        AppThemePalette.MIDNIGHT_ROSE -> MidnightRoseExtendedColors
+        AppThemePalette.CYBER_INDIGO -> CyberIndigoExtendedColors
         AppThemePalette.PEARL_WHITE -> LightExtendedColors
+        AppThemePalette.MINT_BREEZE -> MintLightExtendedColors
     }.copy(liquidGlassEnabled = liquidGlassEnabled)
 
     val view = LocalView.current

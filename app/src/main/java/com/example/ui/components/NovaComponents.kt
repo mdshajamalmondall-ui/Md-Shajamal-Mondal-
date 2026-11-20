@@ -52,14 +52,22 @@ import com.example.ui.theme.AmethystPrimary
 import com.example.ui.theme.ChampagneGold
 import com.example.ui.theme.CrimsonBg
 import com.example.ui.theme.CrimsonPrimary
+import com.example.ui.theme.CyberIndigoBg
+import com.example.ui.theme.CyberIndigoPrimary
 import com.example.ui.theme.EmeraldBg
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.GoldLightPrimary
 import com.example.ui.theme.LocalNovaColors
+import com.example.ui.theme.MidnightRoseBg
+import com.example.ui.theme.MidnightRosePrimary
+import com.example.ui.theme.MintBg
+import com.example.ui.theme.MintLightPrimary
 import com.example.ui.theme.ObsidianBg
 import com.example.ui.theme.OceanBg
 import com.example.ui.theme.OceanPrimary
 import com.example.ui.theme.PearlBg
+import com.example.ui.theme.SunsetBg
+import com.example.ui.theme.SunsetPrimary
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -286,7 +294,11 @@ fun ThemePalettePicker(
         ThemeSwatchSpec(AppThemePalette.ROYAL_AMETHYST, "রয়েল বেগুনি", "Amethyst", AmethystBg, AmethystPrimary),
         ThemeSwatchSpec(AppThemePalette.OCEAN_TEAL, "ওশান টিল", "Ocean", OceanBg, OceanPrimary),
         ThemeSwatchSpec(AppThemePalette.CRIMSON_VELVET, "মেরুন ভেলভেট", "Crimson", CrimsonBg, CrimsonPrimary),
-        ThemeSwatchSpec(AppThemePalette.PEARL_WHITE, "পার্ল হোয়াইট", "Pearl", PearlBg, GoldLightPrimary)
+        ThemeSwatchSpec(AppThemePalette.SUNSET_AMBER, "সানসেট গোল্ড", "Sunset", SunsetBg, SunsetPrimary),
+        ThemeSwatchSpec(AppThemePalette.MIDNIGHT_ROSE, "রোজ পিঙ্ক", "Rose", MidnightRoseBg, MidnightRosePrimary),
+        ThemeSwatchSpec(AppThemePalette.CYBER_INDIGO, "ইন্ডিগো নিয়ন", "Indigo", CyberIndigoBg, CyberIndigoPrimary),
+        ThemeSwatchSpec(AppThemePalette.PEARL_WHITE, "পার্ল হোয়াইট", "Pearl", PearlBg, GoldLightPrimary),
+        ThemeSwatchSpec(AppThemePalette.MINT_BREEZE, "মিন্ট ব্রিজ", "Mint", MintBg, MintLightPrimary)
     )
 
     Column(modifier = modifier.fillMaxWidth()) {

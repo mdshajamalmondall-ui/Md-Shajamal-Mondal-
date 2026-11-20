@@ -9,6 +9,7 @@ import com.example.data.local.SpeedDialEntity
 import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
+import com.example.data.model.BackgroundDoodleStyle
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
@@ -112,6 +113,7 @@ class DialerRepository(
     suspend fun updateHaptic(enabled: Boolean) = preferencesRepository.updateHaptic(enabled)
     suspend fun updateDarkTheme(enabled: Boolean) = preferencesRepository.updateDarkTheme(enabled)
     suspend fun updateThemePalette(palette: AppThemePalette) = preferencesRepository.updateThemePalette(palette)
+    suspend fun updateBackgroundDoodle(style: BackgroundDoodleStyle) = preferencesRepository.updateBackgroundDoodle(style)
     suspend fun updateLanguage(language: AppLanguage) = preferencesRepository.updateLanguage(language)
     suspend fun updateNotifyIncoming(enabled: Boolean) = preferencesRepository.updateNotifyIncoming(enabled)
     suspend fun updateNotifyMissed(enabled: Boolean) = preferencesRepository.updateNotifyMissed(enabled)

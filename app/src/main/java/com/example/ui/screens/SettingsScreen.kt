@@ -77,12 +77,14 @@ import androidx.compose.ui.unit.dp
 import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
+import com.example.data.model.BackgroundDoodleStyle
 import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.DisplayThemeMode
 import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SlideToAnswerMode
 import com.example.data.telephony.CallRecorderManager
+import com.example.ui.components.DoodleStylePicker
 import com.example.ui.components.ThemePalettePicker
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
@@ -121,6 +123,7 @@ fun SettingsScreen(
     onRemoveQuickReply: (String) -> Unit,
     onToggleDarkTheme: (Boolean) -> Unit,
     onSelectThemePalette: (AppThemePalette) -> Unit,
+    onSelectBackgroundDoodle: (BackgroundDoodleStyle) -> Unit,
     onToggleLiquidGlass: (Boolean) -> Unit,
     onSelectDisplayThemeMode: (DisplayThemeMode) -> Unit,
     onSelectFontScale: (AppFontScale) -> Unit,
@@ -152,7 +155,7 @@ fun SettingsScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(Color.Transparent),
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
@@ -377,6 +380,18 @@ fun SettingsScreen(
                                 )
                             }
                         }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            color = nova.glassBorder.copy(alpha = 0.5f)
+                        )
+
+                        // Theme Doodle Pattern Picker right inside Display Options
+                        DoodleStylePicker(
+                            selectedStyle = state.preferences.backgroundDoodle,
+                            language = state.preferences.language,
+                            onSelectStyle = onSelectBackgroundDoodle
+                        )
 
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -1105,6 +1120,15 @@ fun SettingsScreen(
                             selectedPalette = state.preferences.themePalette,
                             language = state.preferences.language,
                             onSelectPalette = onSelectThemePalette
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            color = nova.glassBorder.copy(alpha = 0.5f)
+                        )
+                        DoodleStylePicker(
+                            selectedStyle = state.preferences.backgroundDoodle,
+                            language = state.preferences.language,
+                            onSelectStyle = onSelectBackgroundDoodle
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 8.dp),

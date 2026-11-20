@@ -56,7 +56,23 @@ enum class AppThemePalette {
     ROYAL_AMETHYST,
     OCEAN_TEAL,
     CRIMSON_VELVET,
-    PEARL_WHITE
+    SUNSET_AMBER,
+    MIDNIGHT_ROSE,
+    CYBER_INDIGO,
+    PEARL_WHITE,
+    MINT_BREEZE;
+
+    val isLightPalette: Boolean
+        get() = this == PEARL_WHITE || this == MINT_BREEZE
+}
+
+enum class BackgroundDoodleStyle {
+    NONE,
+    PHONE_DOODLE,
+    COSMIC_STARS,
+    FLORAL_LEAVES,
+    GEOMETRIC_WAVES,
+    HEARTS_SPARKLE
 }
 
 enum class DisplayThemeMode {
@@ -138,7 +154,9 @@ data class CallLogItem(
     val timestamp: Long,
     val durationSeconds: Long,
     val route: CallRoute,
-    val isLocalNovaRecord: Boolean = false
+    val isLocalNovaRecord: Boolean = false,
+    val callCount: Int = 1,
+    val groupedIds: List<String> = emptyList()
 )
 
 @Immutable
@@ -161,6 +179,7 @@ data class UserPreferences(
     val hapticEnabled: Boolean = true,
     val darkThemeEnabled: Boolean = true,
     val themePalette: AppThemePalette = AppThemePalette.ROYAL_SAPPHIRE,
+    val backgroundDoodle: BackgroundDoodleStyle = BackgroundDoodleStyle.PHONE_DOODLE,
     val language: AppLanguage = AppLanguage.BENGALI,
     val notifyIncomingCalls: Boolean = true,
     val notifyMissedCalls: Boolean = true,

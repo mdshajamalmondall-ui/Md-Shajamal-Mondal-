@@ -686,6 +686,31 @@ private fun CallLogCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
+                        if (item.callCount > 1) {
+                            val badgeBg = if (item.direction == CallDirection.MISSED) {
+                                nova.missedContainer
+                            } else {
+                                MaterialTheme.colorScheme.primaryContainer
+                            }
+                            val badgeFg = if (item.direction == CallDirection.MISSED) {
+                                nova.missed
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = badgeBg,
+                                border = BorderStroke(0.75.dp, badgeFg.copy(alpha = 0.45f)),
+                                modifier = Modifier.testTag("call_count_badge_${item.id}")
+                            ) {
+                                Text(
+                                    text = "(${item.callCount})",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = badgeFg,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
                         if (isUnknownCaller && !item.contactName.isNullOrBlank()) {
                             Icon(
                                 imageVector = Icons.Filled.VerifiedUser,
@@ -714,13 +739,28 @@ private fun CallLogCard(
                             tint = dirColor,
                             modifier = Modifier.size(13.dp)
                         )
-                        val subtitleText = remember(item.timestamp, item.durationSeconds, callerCarrierHint, language) {
+                        val subtitleText = remember(item.timestamp, item.durationSeconds, item.callCount, callerCarrierHint, language) {
                             val dur = formatCallDuration(item.durationSeconds, language)
                             val timeStr = formatRelativeTime(item.timestamp, language)
-                            when {
-                                dur.isNotEmpty() -> "$timeStr • $dur"
-                                !callerCarrierHint.isNullOrBlank() -> "$timeStr • $callerCarrierHint"
-                                else -> timeStr
+                            val countStr = if (item.callCount > 1) {
+                                if (language == AppLanguage.BENGALI) "${item.callCount} বার" else "${item.callCount} calls"
+                            } else ""
+                            buildString {
+                                if (countStr.isNotEmpty()) {
+                                    append(countStr)
+                                    append(" • ")
+                                }
+                                append(timeStr)
+                                when {
+                                    dur.isNotEmpty() -> {
+                                        append(" • ")
+                                        append(dur)
+                                    }
+                                    !callerCarrierHint.isNullOrBlank() -> {
+                                        append(" • ")
+                                        append(callerCarrierHint)
+                                    }
+                                }
                             }
                         }
                         Text(

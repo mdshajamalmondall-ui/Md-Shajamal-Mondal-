@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
+import com.example.data.model.BackgroundDoodleStyle
 import com.example.data.model.BrilliantBridgeStatus
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.DefaultRoutePreference
@@ -45,6 +46,7 @@ class PreferencesRepository(private val context: Context) {
         val HAPTIC = booleanPreferencesKey("haptic")
         val DARK_THEME = booleanPreferencesKey("dark_theme")
         val THEME_PALETTE = stringPreferencesKey("theme_palette")
+        val BACKGROUND_DOODLE = stringPreferencesKey("background_doodle")
         val LANGUAGE = stringPreferencesKey("language")
         val NOTIFY_INCOMING = booleanPreferencesKey("notify_incoming")
         val NOTIFY_MISSED = booleanPreferencesKey("notify_missed")
@@ -97,12 +99,15 @@ class PreferencesRepository(private val context: Context) {
             darkThemeEnabled = run {
                 val savedPalette = prefs[Keys.THEME_PALETTE]
                     ?.let { runCatching { AppThemePalette.valueOf(it) }.getOrNull() }
-                if (savedPalette != null) savedPalette != AppThemePalette.PEARL_WHITE
+                if (savedPalette != null) !savedPalette.isLightPalette
                 else prefs[Keys.DARK_THEME] ?: true
             },
             themePalette = prefs[Keys.THEME_PALETTE]
                 ?.let { runCatching { AppThemePalette.valueOf(it) }.getOrNull() }
                 ?: if (prefs[Keys.DARK_THEME] == false) AppThemePalette.PEARL_WHITE else AppThemePalette.ROYAL_SAPPHIRE,
+            backgroundDoodle = prefs[Keys.BACKGROUND_DOODLE]
+                ?.let { runCatching { BackgroundDoodleStyle.valueOf(it) }.getOrNull() }
+                ?: BackgroundDoodleStyle.PHONE_DOODLE,
             language = prefs[Keys.LANGUAGE]
                 ?.let { runCatching { AppLanguage.valueOf(it) }.getOrNull() }
                 ?: AppLanguage.BENGALI,
@@ -208,10 +213,14 @@ class PreferencesRepository(private val context: Context) {
     suspend fun updateThemePalette(palette: AppThemePalette) {
         context.novaDataStore.edit {
             it[Keys.THEME_PALETTE] = palette.name
-            val isDark = palette != AppThemePalette.PEARL_WHITE
+            val isDark = !palette.isLightPalette
             it[Keys.DARK_THEME] = isDark
             it[Keys.DISPLAY_THEME_MODE] = if (isDark) DisplayThemeMode.DARK.name else DisplayThemeMode.LIGHT.name
         }
+    }
+
+    suspend fun updateBackgroundDoodle(style: BackgroundDoodleStyle) {
+        context.novaDataStore.edit { it[Keys.BACKGROUND_DOODLE] = style.name }
     }
 
     suspend fun updateLiquidGlass(enabled: Boolean) {
@@ -221,14 +230,18 @@ class PreferencesRepository(private val context: Context) {
     suspend fun updateDisplayThemeMode(mode: DisplayThemeMode) {
         context.novaDataStore.edit {
             it[Keys.DISPLAY_THEME_MODE] = mode.name
+            val currentPalette = it[Keys.THEME_PALETTE]
+                ?.let { p -> runCatching { AppThemePalette.valueOf(p) }.getOrNull() }
             when (mode) {
                 DisplayThemeMode.LIGHT -> {
                     it[Keys.DARK_THEME] = false
-                    it[Keys.THEME_PALETTE] = AppThemePalette.PEARL_WHITE.name
+                    if (currentPalette?.isLightPalette != true) {
+                        it[Keys.THEME_PALETTE] = AppThemePalette.PEARL_WHITE.name
+                    }
                 }
                 DisplayThemeMode.DARK -> {
                     it[Keys.DARK_THEME] = true
-                    if (it[Keys.THEME_PALETTE] == AppThemePalette.PEARL_WHITE.name) {
+                    if (currentPalette?.isLightPalette == true) {
                         it[Keys.THEME_PALETTE] = AppThemePalette.ROYAL_SAPPHIRE.name
                     }
                 }

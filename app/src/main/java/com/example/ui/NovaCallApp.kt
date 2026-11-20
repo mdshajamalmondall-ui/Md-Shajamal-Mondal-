@@ -79,6 +79,7 @@ import com.example.ui.components.BlockNumberDialog
 import com.example.ui.components.CallNoteDialog
 import com.example.ui.components.CallerDetailBottomSheet
 import com.example.ui.components.ChooseLineBottomSheet
+import com.example.ui.components.DoodleBackgroundCanvas
 import com.example.ui.components.SaveContactBottomSheet
 import com.example.ui.components.SpeedDialAssignDialog
 import com.example.ui.components.TagCallerDialog
@@ -279,10 +280,20 @@ fun NovaCallApp(
             val useRail = maxWidth >= 600.dp
             val showFloatingPill = !useRail && !state.isSettingsOpen
 
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                DoodleBackgroundCanvas(
+                    style = state.preferences.backgroundDoodle,
+                    tint = MaterialTheme.colorScheme.primary,
+                    isDark = nova.isDark,
+                    modifier = Modifier.fillMaxSize()
+                )
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = Color.Transparent,
                     contentWindowInsets = WindowInsets.statusBars,
                     snackbarHost = {
                         SnackbarHost(
@@ -389,6 +400,7 @@ fun NovaCallApp(
                                         onRemoveQuickReply = viewModel::removeQuickReply,
                                         onToggleDarkTheme = viewModel::updateDarkTheme,
                                         onSelectThemePalette = viewModel::updateThemePalette,
+                                        onSelectBackgroundDoodle = viewModel::updateBackgroundDoodle,
                                         onToggleLiquidGlass = viewModel::updateLiquidGlass,
                                         onSelectDisplayThemeMode = viewModel::updateDisplayThemeMode,
                                         onSelectFontScale = viewModel::updateFontScale,
