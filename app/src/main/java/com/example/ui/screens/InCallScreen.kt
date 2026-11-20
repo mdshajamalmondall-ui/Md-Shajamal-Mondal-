@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.AddIcCall
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.StickyNote2
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -81,6 +83,12 @@ import com.example.data.model.formatDisplayNumber
 import com.example.data.telephony.ActiveCallPhase
 import com.example.data.telephony.ActiveCallUiState
 import com.example.ui.components.ContactAvatar
+import com.example.ui.theme.InCallGradBottom
+import com.example.ui.theme.InCallGradMid
+import com.example.ui.theme.InCallGradTop
+import com.example.ui.theme.InCallSpamBottom
+import com.example.ui.theme.InCallSpamMid
+import com.example.ui.theme.InCallSpamTop
 import com.example.ui.theme.LocalNovaColors
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -97,6 +105,7 @@ fun InCallScreen(
     onToggleMute: () -> Unit,
     onToggleSpeaker: () -> Unit,
     onToggleHold: () -> Unit,
+    onToggleRecord: () -> Unit,
     onPlayDtmf: (Char) -> Unit,
     onOpenDialerToAddCall: () -> Unit
 ) {
@@ -106,6 +115,7 @@ fun InCallScreen(
     var showQuickReject by remember { mutableStateOf(false) }
     var dtmfInput by remember { mutableStateOf("") }
     var elapsedSec by remember { mutableLongStateOf(0L) }
+    var recElapsedSec by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(callState.phase, callState.connectedAtMillis) {
         if (callState.phase == ActiveCallPhase.ACTIVE && callState.connectedAtMillis > 0L) {
@@ -115,6 +125,17 @@ fun InCallScreen(
             }
         } else {
             elapsedSec = 0L
+        }
+    }
+
+    LaunchedEffect(callState.isRecording, callState.recordingStartedAtMillis) {
+        if (callState.isRecording && callState.recordingStartedAtMillis > 0L) {
+            while (true) {
+                recElapsedSec = ((System.currentTimeMillis() - callState.recordingStartedAtMillis) / 1000L).coerceAtLeast(0L)
+                delay(1000L)
+            }
+        } else {
+            recElapsedSec = 0L
         }
     }
 
@@ -171,29 +192,51 @@ fun InCallScreen(
         else -> nova.gold
     }
 
+    val callBackgroundBrush = remember(callState.isSpamCaller) {
+        if (callState.isSpamCaller) {
+            Brush.verticalGradient(
+                colors = listOf(InCallSpamTop, InCallSpamMid, InCallSpamBottom)
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(InCallGradTop, InCallGradMid, InCallGradBottom)
+            )
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(callBackgroundBrush)
             .drawBehind {
                 drawCircle(
                     brush = Brush.radialGradient(
                         listOf(
-                            (if (callState.isSpamCaller) nova.missed else nova.brilliant).copy(alpha = 0.24f),
+                            (if (callState.isSpamCaller) nova.missed else nova.sim1).copy(alpha = 0.28f),
                             Color.Transparent
                         ),
-                        center = Offset(size.width * 0.5f, size.height * 0.24f),
-                        radius = size.width * 0.72f
+                        center = Offset(size.width * 0.5f, size.height * 0.22f),
+                        radius = size.width * 0.78f
                     )
                 )
                 drawCircle(
                     brush = Brush.radialGradient(
                         listOf(
-                            nova.gold.copy(alpha = 0.14f),
+                            nova.brilliant.copy(alpha = 0.24f),
                             Color.Transparent
                         ),
-                        center = Offset(size.width * 0.2f, size.height * 0.78f),
-                        radius = size.width * 0.6f
+                        center = Offset(size.width * 0.85f, size.height * 0.62f),
+                        radius = size.width * 0.65f
+                    )
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(
+                            nova.sim2.copy(alpha = 0.20f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.18f, size.height * 0.82f),
+                        radius = size.width * 0.62f
                     )
                 )
             }
@@ -337,6 +380,50 @@ fun InCallScreen(
                     )
                 }
 
+                // Live Recording Indicator / Saved Toast Pill
+                if (callState.isRecording) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = nova.missedContainer.copy(alpha = 0.9f),
+                        border = BorderStroke(1.dp, nova.missed)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .alpha(statusDotAlpha)
+                                    .clip(CircleShape)
+                                    .background(nova.missed)
+                            )
+                            Text(
+                                text = (if (isBn) "রেকর্ড চলছে " else "REC ") +
+                                    String.format("%02d:%02d", recElapsedSec / 60, recElapsedSec % 60),
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+                    }
+                } else if (!callState.recordingStatusMessage.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = nova.sim1Container.copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, nova.sim1.copy(alpha = 0.6f))
+                    ) {
+                        Text(
+                            text = callState.recordingStatusMessage,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = nova.sim1,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
                 // Saved Caller Note Context Banner
                 if (!callState.callerNote.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(10.dp))
@@ -453,6 +540,9 @@ fun InCallScreen(
             } else {
                 // Active / Ringing-Out Controls
                 val isConnected = callState.phase == ActiveCallPhase.ACTIVE || callState.phase == ActiveCallPhase.HOLDING
+                val canRecord = callState.phase != ActiveCallPhase.RINGING &&
+                    callState.phase != ActiveCallPhase.DISCONNECTED &&
+                    callState.phase != ActiveCallPhase.DISCONNECTING
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -468,6 +558,7 @@ fun InCallScreen(
                             label = if (isBn) "মিউট" else "Mute",
                             active = callState.isMuted,
                             enabled = true,
+                            testTagName = "incall_mute_button",
                             onClick = onToggleMute
                         )
                         InCallControlButton(
@@ -475,6 +566,7 @@ fun InCallScreen(
                             label = if (isBn) "কি-প্যাড" else "Keypad",
                             active = showKeypad,
                             enabled = true,
+                            testTagName = "incall_keypad_button",
                             onClick = { showKeypad = !showKeypad }
                         )
                         InCallControlButton(
@@ -482,6 +574,8 @@ fun InCallScreen(
                             label = if (isBn) "স্পিকার" else "Speaker",
                             active = callState.isSpeakerOn,
                             enabled = true,
+                            activeColor = nova.sim1,
+                            testTagName = "incall_speaker_button",
                             onClick = onToggleSpeaker
                         )
                     }
@@ -493,10 +587,25 @@ fun InCallScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         InCallControlButton(
+                            icon = if (callState.isRecording) Icons.Filled.StopCircle else Icons.Filled.FiberManualRecord,
+                            label = if (callState.isRecording) {
+                                if (isBn) "স্টপ রেকর্ড" else "Stop Rec"
+                            } else {
+                                if (isBn) "রেকর্ড" else "Record"
+                            },
+                            active = callState.isRecording,
+                            enabled = canRecord,
+                            activeColor = nova.missed,
+                            activeIconTint = Color.White,
+                            testTagName = "incall_record_button",
+                            onClick = onToggleRecord
+                        )
+                        InCallControlButton(
                             icon = if (callState.isOnHold) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                             label = if (callState.isOnHold) (if (isBn) "রিজিউম" else "Resume") else (if (isBn) "হোল্ড" else "Hold"),
                             active = callState.isOnHold,
                             enabled = isConnected,
+                            testTagName = "incall_hold_button",
                             onClick = onToggleHold
                         )
                         InCallControlButton(
@@ -504,6 +613,7 @@ fun InCallScreen(
                             label = if (isBn) "অ্যাড কল" else "Add Call",
                             active = false,
                             enabled = isConnected,
+                            testTagName = "incall_add_call_button",
                             onClick = onOpenDialerToAddCall
                         )
                     }
@@ -816,29 +926,34 @@ private fun InCallControlButton(
     label: String,
     active: Boolean,
     enabled: Boolean,
+    activeColor: Color? = null,
+    activeIconTint: Color = Color(0xFF1A1204),
+    testTagName: String = "",
     onClick: () -> Unit
 ) {
     val nova = LocalNovaColors.current
+    val resolvedActiveBg = activeColor ?: nova.gold
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(84.dp)
+            .width(88.dp)
             .alpha(if (enabled) 1f else 0.42f)
             .clip(RoundedCornerShape(18.dp))
             .clickable(enabled = enabled, onClick = onClick)
+            .let { mod -> if (testTagName.isNotBlank()) mod.testTag(testTagName) else mod }
             .padding(vertical = 6.dp)
     ) {
         Box(
             modifier = Modifier
                 .size(56.dp)
                 .clip(CircleShape)
-                .background(if (active) nova.gold else nova.glassSurface),
+                .background(if (active) resolvedActiveBg else nova.glassSurface),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (active) Color(0xFF1A1204) else MaterialTheme.colorScheme.onSurface,
+                tint = if (active) activeIconTint else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -846,7 +961,7 @@ private fun InCallControlButton(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (active) nova.gold else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (active) resolvedActiveBg else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
     }

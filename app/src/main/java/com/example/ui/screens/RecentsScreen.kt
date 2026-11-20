@@ -2,8 +2,10 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,11 +32,13 @@ import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.StickyNote2
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -42,7 +46,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,10 +60,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.model.AppLanguage
 import com.example.data.model.CallDirection
 import com.example.data.model.CallFilterType
 import com.example.data.model.CallLogItem
@@ -71,6 +81,7 @@ import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
 import com.example.ui.viewmodel.DialerUiState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecentsScreen(
     state: DialerUiState,
@@ -82,9 +93,13 @@ fun RecentsScreen(
     onOpenCallerDetail: (String, String?) -> Unit,
     onWhatsApp: (String) -> Unit,
     onOpenNoteDialog: (String, String?) -> Unit,
+    onDeleteCallLog: (CallLogItem) -> Unit,
+    onLongPressCallOptions: (CallLogItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val nova = LocalNovaColors.current
+    val haptic = LocalHapticFeedback.current
+    val isBn = state.preferences.language == AppLanguage.BENGALI
     var expandedId by remember { mutableStateOf<String?>(null) }
 
     val blockedSet = remember(state.blockedNumbers) {
@@ -178,7 +193,17 @@ fun RecentsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = if (isBn) "ডানে টানলে কল • বামে টানলে ডিলিট • চেপে ধরলে কল অপশন"
+                else "Swipe right to call • Swipe left to delete • Long press for options",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
 
             if (!state.permissions.hasReadCallLog) {
                 PermissionAccessCard(
@@ -236,25 +261,108 @@ fun RecentsScreen(
                     items(state.filteredCallLogs, key = { it.id }) { item ->
                         val isBlocked = blockedSet.contains(item.normalizedNumber)
                         val note = notesMap[item.normalizedNumber]
-                        CallLogCard(
-                            item = item,
-                            expanded = expandedId == item.id,
-                            isBlocked = isBlocked,
-                            noteText = note?.note,
-                            sim1Label = state.sim1.displayName,
-                            sim2Label = state.sim2.displayName,
-                            strings = strings,
-                            language = state.preferences.language,
-                            onToggleExpand = {
-                                expandedId = if (expandedId == item.id) null else item.id
-                            },
-                            onCallRoute = { route ->
-                                onCallRoute(item.number, route, item.contactName)
-                            },
-                            onWhatsApp = { onWhatsApp(item.number) },
-                            onAddNote = { onOpenNoteDialog(item.number, item.contactName) },
-                            onOpenDetail = { onOpenCallerDetail(item.number, item.contactName) }
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { targetValue ->
+                                when (targetValue) {
+                                    SwipeToDismissBoxValue.StartToEnd -> {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onCallRoute(item.number, item.route, item.contactName)
+                                        false
+                                    }
+                                    SwipeToDismissBoxValue.EndToStart -> {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onDeleteCallLog(item)
+                                        true
+                                    }
+                                    SwipeToDismissBoxValue.Settled -> false
+                                }
+                            }
                         )
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            enableDismissFromStartToEnd = true,
+                            enableDismissFromEndToStart = true,
+                            backgroundContent = {
+                                val direction = dismissState.dismissDirection
+                                val bgColor = when (direction) {
+                                    SwipeToDismissBoxValue.StartToEnd -> nova.sim1
+                                    SwipeToDismissBoxValue.EndToStart -> nova.missed
+                                    else -> Color.Transparent
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(bgColor)
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) {
+                                        Alignment.CenterStart
+                                    } else {
+                                        Alignment.CenterEnd
+                                    }
+                                ) {
+                                    if (direction == SwipeToDismissBoxValue.StartToEnd) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Call,
+                                                contentDescription = strings.call,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                            Text(
+                                                text = if (isBn) "কল করুন" else "Call",
+                                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                color = Color.White
+                                            )
+                                        }
+                                    } else if (direction == SwipeToDismissBoxValue.EndToStart) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = if (isBn) "ডিলিট" else "Delete",
+                                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                color = Color.White
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Filled.Delete,
+                                                contentDescription = strings.delete,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
+                            CallLogCard(
+                                item = item,
+                                expanded = expandedId == item.id,
+                                isBlocked = isBlocked,
+                                noteText = note?.note,
+                                sim1Label = state.sim1.displayName,
+                                sim2Label = state.sim2.displayName,
+                                strings = strings,
+                                language = state.preferences.language,
+                                onToggleExpand = {
+                                    expandedId = if (expandedId == item.id) null else item.id
+                                },
+                                onLongPress = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onLongPressCallOptions(item)
+                                },
+                                onCallRoute = { route ->
+                                    onCallRoute(item.number, route, item.contactName)
+                                },
+                                onWhatsApp = { onWhatsApp(item.number) },
+                                onAddNote = { onOpenNoteDialog(item.number, item.contactName) },
+                                onOpenDetail = { onOpenCallerDetail(item.number, item.contactName) }
+                            )
+                        }
                     }
                 }
             }
@@ -262,6 +370,7 @@ fun RecentsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CallLogCard(
     item: CallLogItem,
@@ -271,8 +380,9 @@ private fun CallLogCard(
     sim1Label: String,
     sim2Label: String,
     strings: NovaStrings,
-    language: com.example.data.model.AppLanguage,
+    language: AppLanguage,
     onToggleExpand: () -> Unit,
+    onLongPress: () -> Unit,
     onCallRoute: (CallRoute) -> Unit,
     onWhatsApp: () -> Unit,
     onAddNote: () -> Unit,
@@ -293,7 +403,10 @@ private fun CallLogCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onToggleExpand)
+            .combinedClickable(
+                onClick = onToggleExpand,
+                onLongClick = onLongPress
+            )
             .testTag("call_log_card_${item.id}"),
         shape = RoundedCornerShape(20.dp),
         color = nova.glassSurface,
@@ -313,6 +426,7 @@ private fun CallLogCard(
             ) {
                 ContactAvatar(
                     name = item.contactName ?: item.number,
+                    photoUri = item.photoUri,
                     size = 44.dp,
                     accentOverride = if (item.direction == CallDirection.MISSED) nova.missed else null
                 )

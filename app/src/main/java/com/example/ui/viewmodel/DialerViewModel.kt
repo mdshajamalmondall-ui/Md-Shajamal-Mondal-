@@ -181,6 +181,7 @@ class DialerViewModel(
     private val isLookingUpCallerId = MutableStateFlow(false)
     private val isSyncingCommunityContacts = MutableStateFlow(false)
     private val cloudErrorMessage = MutableStateFlow<String?>(null)
+    private val hiddenCallLogIds = MutableStateFlow<Set<String>>(emptySet())
     private var lookupJob: Job? = null
 
     private val systemSnapshot = MutableStateFlow(
@@ -271,14 +272,18 @@ class DialerViewModel(
 
     val uiState: StateFlow<DialerUiState> = combine(
         roomSnapshotFlow,
-        systemSnapshot,
+        combine(systemSnapshot, hiddenCallLogIds) { sys, hidden -> sys to hidden },
         uiInputFlow,
         cloudSnapshotFlow
-    ) { room, sys, input, cloud ->
+    ) { room, sysPair, input, cloud ->
+        val sys = sysPair.first
+        val hiddenIds = sysPair.second
         val mergedLogs = mergeCallLogs(
             systemLogs = sys.systemCallLogs,
             localRecords = room.appCallRecords,
-            contacts = sys.contacts
+            contacts = sys.contacts,
+            callNotes = room.callNotes,
+            hiddenIds = hiddenIds
         )
         val normalizedDial = normalizePhoneNumber(input.dialedDigits)
         val t9Matches = computeT9Matches(input.dialedDigits, sys.contacts)
@@ -424,8 +429,42 @@ class DialerViewModel(
             return
         }
 
-        // Show instant offline carrier / verified BD service info immediately
-        dialedLookupResult.value = CallerIdIntelligence.detectOffline(rawInput)
+        // Show instant offline carrier / verified BD service info + local saved tag immediately
+        val offlineBase = CallerIdIntelligence.detectOffline(rawInput)
+        val normInput = normalizePhoneNumber(rawInput)
+        val tailInput = normInput.takeLast(10)
+        val localTaggedNote = uiState.value.callNotes.firstOrNull { note ->
+            note.contactName.isNotBlank() && (
+                note.normalizedNumber == normInput ||
+                    (tailInput.length >= 8 && note.normalizedNumber.endsWith(tailInput))
+                )
+        }
+        val myCloudTag = myTagsFlow.value.firstOrNull { tag ->
+            tag.displayName.isNotBlank() && (
+                tag.phoneKey == normInput ||
+                    (tailInput.length >= 8 && tag.phoneKey.endsWith(tailInput))
+                )
+        }
+        val instantLocalName = myCloudTag?.displayName?.takeIf { it.isNotBlank() }
+            ?: localTaggedNote?.contactName?.takeIf { it.isNotBlank() }
+
+        val resolvedTagCategory = myCloudTag?.category
+            ?.let { raw -> runCatching { CallerCategory.valueOf(raw.uppercase()) }.getOrNull() }
+            ?: CallerCategory.PERSONAL
+
+        dialedLookupResult.value = if (!instantLocalName.isNullOrBlank()) {
+            (offlineBase ?: CallerIdLookupResult(
+                phoneKey = normInput,
+                displayName = instantLocalName,
+                carrierOrRegion = ""
+            )).copy(
+                displayName = instantLocalName,
+                category = resolvedTagCategory,
+                source = com.example.data.cloud.CallerIdSource.COMMUNITY_CLOUD
+            )
+        } else {
+            offlineBase
+        }
 
         val callerIdEnabled = cloudProfileFlow.value?.callerIdEnabled ?: true
         val repo = callerIdRepository
@@ -439,7 +478,11 @@ class DialerViewModel(
             isLookingUpCallerId.value = true
             val result = repo.lookupNumber(rawInput)
             if (dialedDigits.value.filter { it.isDigit() } == digitsOnly) {
-                dialedLookupResult.value = result
+                if (!result?.displayName.isNullOrBlank()) {
+                    dialedLookupResult.value = result
+                } else if (instantLocalName.isNullOrBlank()) {
+                    dialedLookupResult.value = result
+                }
             }
             isLookingUpCallerId.value = false
         }
@@ -546,6 +589,10 @@ class DialerViewModel(
     fun createRequestDefaultDialerIntent(): Intent? = telephony.createRequestDefaultDialerIntent()
 
     fun openAppNotificationSettings() = telephony.openAppNotificationSettings()
+
+    fun openAppInfoSettings() = telephony.openAppInfoSettings()
+
+    fun openSystemDefaultAppsSettings() = telephony.openSystemDefaultAppsSettings()
 
     fun openSettings() {
         isSettingsOpen.value = true
@@ -789,6 +836,26 @@ class DialerViewModel(
         viewModelScope.launch { repository.deleteCallNote(normalizedNumber) }
     }
 
+    fun deleteCallLogItem(item: CallLogItem) {
+        hiddenCallLogIds.value = hiddenCallLogIds.value + item.id
+        if (item.id.startsWith("sys_")) {
+            systemSnapshot.value = systemSnapshot.value.copy(
+                systemCallLogs = systemSnapshot.value.systemCallLogs.filterNot { it.id == item.id }
+            )
+        }
+        viewModelScope.launch {
+            if (item.id.startsWith("local_")) {
+                item.id.removePrefix("local_").toLongOrNull()?.let { localId ->
+                    repository.deleteLocalCallRecord(localId)
+                }
+            } else if (item.id.startsWith("sys_")) {
+                telephony.deleteSystemCallLog(item.id.removePrefix("sys_"))
+            }
+            val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+            emitMessage(if (isBn) "কল হিস্ট্রি থেকে ডিলিট হয়েছে" else "Deleted from call history")
+        }
+    }
+
     fun updateBrilliantPackage(pkg: String) = viewModelScope.launch {
         repository.updateBrilliantPackage(pkg.ifBlank { BrilliantBridgeStatus.DEFAULT_BRILLIANT_PACKAGE })
     }
@@ -887,43 +954,85 @@ class DialerViewModel(
         _events.tryEmit(DialerUiEvent.ShowMessage(text))
     }
 
-    private fun resolveContactName(number: String, contacts: List<DeviceContact>): String? {
+    private fun resolveContact(number: String, contacts: List<DeviceContact>): DeviceContact? {
         val norm = normalizePhoneNumber(number)
         if (norm.length < 4) return null
         val tail = norm.takeLast(10)
         return contacts.firstOrNull {
             it.normalizedNumber == norm ||
                 (tail.length >= 8 && it.normalizedNumber.endsWith(tail))
-        }?.name
+        }
+    }
+
+    private fun resolveContactName(number: String, contacts: List<DeviceContact>): String? {
+        return resolveContact(number, contacts)?.name
+    }
+
+    private fun resolveLocalTagName(number: String, callNotes: List<CallNoteEntity>): String? {
+        val norm = normalizePhoneNumber(number)
+        if (norm.length < 4) return null
+        val tail = norm.takeLast(10)
+        return callNotes.firstOrNull {
+            it.contactName.isNotBlank() && (
+                it.normalizedNumber == norm ||
+                    (tail.length >= 8 && it.normalizedNumber.endsWith(tail))
+                )
+        }?.contactName
     }
 
     private fun mergeCallLogs(
         systemLogs: List<CallLogItem>,
         localRecords: List<AppCallRecordEntity>,
-        contacts: List<DeviceContact>
+        contacts: List<DeviceContact>,
+        callNotes: List<CallNoteEntity>,
+        hiddenIds: Set<String>
     ): List<CallLogItem> {
-        val localMapped = localRecords.map { rec ->
-            val route = runCatching { CallRoute.valueOf(rec.route) }.getOrDefault(CallRoute.SIM_1)
-            CallLogItem(
-                id = "local_${rec.id}",
-                number = rec.number,
-                normalizedNumber = rec.normalizedNumber,
-                contactName = rec.contactName ?: resolveContactName(rec.number, contacts),
-                direction = CallDirection.OUTGOING,
-                timestamp = rec.timestamp,
-                durationSeconds = 0L,
-                route = route,
-                isLocalNovaRecord = true
-            )
-        }
+        val enrichedSystemLogs = systemLogs
+            .filterNot { it.id in hiddenIds }
+            .map { sys ->
+                val matchedContact = resolveContact(sys.number, contacts)
+                val resolvedName = sys.contactName?.takeIf { it.isNotBlank() }
+                    ?: matchedContact?.name
+                    ?: resolveLocalTagName(sys.number, callNotes)
+                    ?: CallerIdIntelligence.detectOffline(sys.number)?.displayName
+                val resolvedPhoto = sys.photoUri?.takeIf { it.isNotBlank() }
+                    ?: matchedContact?.photoUri
+                sys.copy(
+                    contactName = resolvedName,
+                    photoUri = resolvedPhoto
+                )
+            }
+
+        val localMapped = localRecords
+            .map { rec ->
+                val route = runCatching { CallRoute.valueOf(rec.route) }.getOrDefault(CallRoute.SIM_1)
+                val matchedContact = resolveContact(rec.number, contacts)
+                CallLogItem(
+                    id = "local_${rec.id}",
+                    number = rec.number,
+                    normalizedNumber = rec.normalizedNumber,
+                    contactName = rec.contactName?.takeIf { it.isNotBlank() }
+                        ?: matchedContact?.name
+                        ?: resolveLocalTagName(rec.number, callNotes)
+                        ?: CallerIdIntelligence.detectOffline(rec.number)?.displayName,
+                    photoUri = matchedContact?.photoUri,
+                    direction = CallDirection.OUTGOING,
+                    timestamp = rec.timestamp,
+                    durationSeconds = 0L,
+                    route = route,
+                    isLocalNovaRecord = true
+                )
+            }
+            .filterNot { it.id in hiddenIds }
+
         val filteredLocal = localMapped.filter { local ->
             if (local.route == CallRoute.BRILLIANT) return@filter true
-            systemLogs.none { sys ->
+            enrichedSystemLogs.none { sys ->
                 sys.normalizedNumber.takeLast(10) == local.normalizedNumber.takeLast(10) &&
                     kotlin.math.abs(sys.timestamp - local.timestamp) < 15_000L
             }
         }
-        return (filteredLocal + systemLogs)
+        return (filteredLocal + enrichedSystemLogs)
             .sortedByDescending { it.timestamp }
             .take(150)
     }

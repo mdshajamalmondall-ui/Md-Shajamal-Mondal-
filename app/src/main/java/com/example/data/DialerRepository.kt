@@ -87,6 +87,8 @@ class DialerRepository(
         )
     }
 
+    suspend fun deleteLocalCallRecord(id: Long) = dao.deleteAppCallRecordById(id)
+
     suspend fun clearLocalCallRecords() = dao.clearAppCallRecords()
 
     suspend fun updateBrilliantPackage(pkg: String) = preferencesRepository.updateBrilliantPackage(pkg)

@@ -2,13 +2,21 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Midnight Obsidian Luxury Dark Palette
-val ObsidianBg = Color(0xFF090B10)
-val ObsidianSurface = Color(0xFF111520)
-val ObsidianSurfaceElevated = Color(0xFF191F2E)
-val ObsidianSurfaceHighest = Color(0xFF232B3E)
-val ObsidianOutline = Color(0xFF2C364E)
-val ObsidianOutlineSubtle = Color(0xFF1E2538)
+// Royal Sapphire & Deep Ocean Palette (rich color, never flat black)
+val ObsidianBg = Color(0xFF0D1B3E)
+val ObsidianSurface = Color(0xFF132652)
+val ObsidianSurfaceElevated = Color(0xFF1B336B)
+val ObsidianSurfaceHighest = Color(0xFF244182)
+val ObsidianOutline = Color(0xFF355496)
+val ObsidianOutlineSubtle = Color(0xFF223B72)
+
+// Vibrant In-Call Screen Gradient Tokens
+val InCallGradTop = Color(0xFF0D3B54)
+val InCallGradMid = Color(0xFF173570)
+val InCallGradBottom = Color(0xFF2C1E63)
+val InCallSpamTop = Color(0xFF541425)
+val InCallSpamMid = Color(0xFF3A1438)
+val InCallSpamBottom = Color(0xFF21133A)
 
 // Champagne Gold Primary
 val ChampagneGold = Color(0xFFE8B86D)

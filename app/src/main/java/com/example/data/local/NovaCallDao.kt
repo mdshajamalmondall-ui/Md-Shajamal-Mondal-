@@ -47,6 +47,9 @@ interface NovaCallDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAppCallRecord(entity: AppCallRecordEntity)
 
+    @Query("DELETE FROM app_call_records WHERE id = :id")
+    suspend fun deleteAppCallRecordById(id: Long)
+
     @Query("DELETE FROM app_call_records")
     suspend fun clearAppCallRecords()
 }

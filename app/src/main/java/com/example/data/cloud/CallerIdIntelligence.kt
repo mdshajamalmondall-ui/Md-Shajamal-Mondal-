@@ -11,13 +11,25 @@ object CallerIdIntelligence {
         "333" to ("সরকারি তথ্য ও সেবা (333)" to "Govt Helpline • BD"),
         "109" to ("নারী ও শিশু নির্যাতন প্রতিরোধ" to "Helpline • Bangladesh"),
         "106" to ("দুদক হটলাইন (ACC)" to "Govt Helpline • BD"),
+        "105" to ("জাতীয় পরিচয়পত্র (NID) সেবা" to "Govt Helpline • BD"),
+        "102" to ("ফায়ার সার্ভিস ও সিভিল ডিফেন্স" to "Emergency • BD"),
         "16263" to ("স্বাস্থ্য বাতায়ন (Health)" to "Medical Helpline • BD"),
         "16247" to ("বিকাশ কাস্টমার কেয়ার (bKash)" to "Mobile Banking • BD"),
         "16167" to ("নগদ কাস্টমার কেয়ার (Nagad)" to "Mobile Banking • BD"),
         "16216" to ("রকেট / ডাচ-বাংলা ব্যাংক" to "Banking • BD"),
         "16268" to ("উপায় (Upay) কেয়ার" to "Mobile Banking • BD"),
+        "16221" to ("ব্র্যাক ব্যাংক (BRAC Bank)" to "Banking • BD"),
+        "16234" to ("সিটি ব্যাংক (City Bank)" to "Banking • BD"),
+        "16259" to ("ইসলামী ব্যাংক (IBBL)" to "Banking • BD"),
+        "16230" to ("ইস্টার্ন ব্যাংক (EBL)" to "Banking • BD"),
+        "16123" to ("কৃষি কল সেন্টার" to "Agriculture • BD"),
+        "16104" to ("বিটিসিএল / ব্রিলিয়ান্ট সাপোর্ট" to "Telecom • BD"),
         "121" to ("অপারেটর কাস্টমার কেয়ার" to "Telecom Support"),
-        "158" to ("টেলিটক কাস্টমার কেয়ার" to "Teletalk • BD")
+        "158" to ("টেলিটক কাস্টমার কেয়ার" to "Teletalk • BD"),
+        "09610001000" to ("ব্রিলিয়ান্ট কানেক্ট সাপোর্ট" to "Brilliant VoIP • BD"),
+        "09612007007" to ("দারাজ বাংলাদেশ (Daraz)" to "E-Commerce • BD"),
+        "09678100800" to ("পাঠাও (Pathao)" to "Ride & Delivery • BD"),
+        "09612316247" to ("বিকাশ সাপোর্ট (bKash)" to "Mobile Banking • BD")
     )
 
     fun detectOffline(rawNumber: String): CallerIdLookupResult? {

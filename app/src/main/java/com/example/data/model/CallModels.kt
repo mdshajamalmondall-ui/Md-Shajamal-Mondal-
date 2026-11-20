@@ -89,6 +89,7 @@ data class CallLogItem(
     val number: String,
     val normalizedNumber: String,
     val contactName: String?,
+    val photoUri: String? = null,
     val direction: CallDirection,
     val timestamp: Long,
     val durationSeconds: Long,

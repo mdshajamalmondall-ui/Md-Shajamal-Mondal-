@@ -153,7 +153,9 @@ fun NovaCallApp(
             add(Manifest.permission.READ_PHONE_STATE)
             add(Manifest.permission.READ_CONTACTS)
             add(Manifest.permission.READ_CALL_LOG)
+            add(Manifest.permission.WRITE_CALL_LOG)
             add(Manifest.permission.ANSWER_PHONE_CALLS)
+            add(Manifest.permission.RECORD_AUDIO)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -326,6 +328,8 @@ fun NovaCallApp(
                                     strings = strings,
                                     onBack = viewModel::closeSettings,
                                     onRequestDefaultDialer = requestDefaultDialer,
+                                    onOpenAppInfoSettings = viewModel::openAppInfoSettings,
+                                    onOpenSystemDefaultApps = viewModel::openSystemDefaultAppsSettings,
                                     onRequestPermissions = requestAllPermissions,
                                     onOpenSystemNotificationSettings = viewModel::openAppNotificationSettings,
                                     onToggleNotifyIncoming = viewModel::updateNotifyIncoming,
@@ -413,6 +417,10 @@ fun NovaCallApp(
                                                 note = existing?.note.orEmpty(),
                                                 hasReminder = existing?.hasReminder ?: false
                                             )
+                                        },
+                                        onDeleteCallLog = viewModel::deleteCallLogItem,
+                                        onLongPressCallOptions = { item ->
+                                            viewModel.openRoutePicker(item.number, item.contactName)
                                         }
                                     )
 

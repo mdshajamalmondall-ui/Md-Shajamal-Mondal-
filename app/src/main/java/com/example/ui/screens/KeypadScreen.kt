@@ -596,15 +596,17 @@ fun KeypadScreen(
                 }
             }
 
-            // Glassmorphic T9 Keypad Grid
+            // Compact Glassmorphic T9 Keypad Grid
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 DIAL_ROWS.forEach { row ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         row.forEach { spec ->
                             val speedDial = spec.digitNum?.let { speedDialMap[it] }
@@ -621,7 +623,7 @@ fun KeypadScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Signature Triple-Line Call Dock: SIM 1 | Brilliant Connect | SIM 2
             TripleLineCallDock(
@@ -635,7 +637,7 @@ fun KeypadScreen(
                 onCallSim2 = { onCallRoute(state.dialedDigits, CallRoute.SIM_2, null) }
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         }
     }
 }
@@ -773,8 +775,8 @@ private fun DialKeyButton(
 
     Surface(
         modifier = modifier
-            .height(62.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .height(50.dp)
+            .clip(RoundedCornerShape(16.dp))
             .combinedClickable(
                 onClick = {
                     if (hapticEnabled) {
@@ -790,7 +792,7 @@ private fun DialKeyButton(
                 }
             )
             .testTag("dial_key_${spec.primary}"),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = nova.glassSurface.copy(alpha = if (nova.isDark) 0.88f else 0.96f),
         border = BorderStroke(
             width = 1.dp,
@@ -804,16 +806,17 @@ private fun DialKeyButton(
         ) {
             Text(
                 text = spec.primary,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.SemiBold
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 23.sp
                 ),
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (speedDial != null) {
                 Text(
                     text = speedDial.name.take(8),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.5.sp, lineHeight = 10.sp),
                     color = nova.gold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -822,8 +825,9 @@ private fun DialKeyButton(
                 Text(
                     text = spec.letters,
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 9.5.sp,
-                        letterSpacing = 1.2.sp
+                        fontSize = 8.5.sp,
+                        letterSpacing = 1.sp,
+                        lineHeight = 10.sp
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                 )
@@ -854,11 +858,11 @@ private fun TripleLineCallDock(
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .height(60.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .height(52.dp)
+                .clip(RoundedCornerShape(18.dp))
                 .clickable(onClick = onCallSim1)
                 .testTag("call_sim1_button"),
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(18.dp),
             color = nova.sim1Container,
             border = BorderStroke(1.2.dp, nova.sim1.copy(alpha = 0.65f))
         ) {
@@ -877,7 +881,7 @@ private fun TripleLineCallDock(
                         imageVector = Icons.Filled.Call,
                         contentDescription = stringResource(R.string.cd_call_sim1),
                         tint = nova.sim1,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Text(
                         text = "SIM 1",
@@ -899,8 +903,8 @@ private fun TripleLineCallDock(
         Box(
             modifier = Modifier
                 .weight(1.25f)
-                .height(64.dp)
-                .clip(RoundedCornerShape(24.dp))
+                .height(56.dp)
+                .clip(RoundedCornerShape(20.dp))
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
@@ -913,7 +917,7 @@ private fun TripleLineCallDock(
                 .border(
                     width = if (highlightBrilliant) 2.dp else 1.2.dp,
                     color = if (highlightBrilliant) nova.gold else Color.White.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(24.dp)
+                    shape = RoundedCornerShape(20.dp)
                 )
                 .clickable(onClick = onCallBrilliant)
                 .testTag("call_brilliant_button"),
@@ -932,7 +936,7 @@ private fun TripleLineCallDock(
                         imageVector = Icons.Filled.Bolt,
                         contentDescription = stringResource(R.string.cd_call_brilliant),
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                     Text(
                         text = brilliantLabel,
@@ -954,7 +958,7 @@ private fun TripleLineCallDock(
                     )
                     Text(
                         text = if (brilliantInstalled) "VoIP Direct" else "Connect App",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                         color = Color.White.copy(alpha = 0.88f)
                     )
                 }
@@ -965,11 +969,11 @@ private fun TripleLineCallDock(
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .height(60.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .height(52.dp)
+                .clip(RoundedCornerShape(18.dp))
                 .clickable(onClick = onCallSim2)
                 .testTag("call_sim2_button"),
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(18.dp),
             color = nova.sim2Container,
             border = BorderStroke(1.2.dp, nova.sim2.copy(alpha = 0.65f))
         ) {

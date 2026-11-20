@@ -32,10 +32,14 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SimCard
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
@@ -56,6 +60,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,15 +70,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.AppLanguage
 import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.KeypadSoundStyle
+import com.example.data.telephony.CallRecorderManager
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
 import com.example.ui.viewmodel.DialerUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -82,6 +93,8 @@ fun SettingsScreen(
     strings: NovaStrings,
     onBack: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
+    onOpenAppInfoSettings: () -> Unit,
+    onOpenSystemDefaultApps: () -> Unit,
     onRequestPermissions: () -> Unit,
     onOpenSystemNotificationSettings: () -> Unit,
     onToggleNotifyIncoming: (Boolean) -> Unit,
@@ -111,11 +124,20 @@ fun SettingsScreen(
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val nova = LocalNovaColors.current
     val isBn = state.preferences.language == AppLanguage.BENGALI
     var sim1Input by remember(state.preferences.sim1Alias) { mutableStateOf(state.preferences.sim1Alias) }
     var sim2Input by remember(state.preferences.sim2Alias) { mutableStateOf(state.preferences.sim2Alias) }
     var newReply by remember { mutableStateOf("") }
+    var recordings by remember { mutableStateOf(CallRecorderManager.listRecordings(context)) }
+    var playingRecordingPath by remember { mutableStateOf<String?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            CallRecorderManager.stopPlayback()
+        }
+    }
 
     Box(
         modifier = modifier
@@ -231,6 +253,53 @@ fun SettingsScreen(
                                         style = MaterialTheme.typography.labelLarge
                                     )
                                 }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+                                    border = BorderStroke(1.dp, nova.glassBorder)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isBn) {
+                                                "যদি 'App was denied access' দেখায় (Android 14/15):\n১) নিচের 'App Info (অনুমতি)' বাটনে চাপুন\n২) উপরের ডান কোনায় তিন ডট (⋮) মেনু থেকে 'Allow restricted settings' চালু করুন\n৩) ফিরে এসে আবার 'ডিফল্ট ফোন অ্যাপ করুন' চাপুন"
+                                            } else {
+                                                "If Android shows 'App was denied access':\n1) Tap 'App Info (Unlock)' below\n2) Tap the top-right 3-dot (⋮) menu -> 'Allow restricted settings'\n3) Return here and tap 'Make Shajamal Default Dialer'"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(
+                                                onClick = onOpenAppInfoSettings,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("open_app_info_restricted_button"),
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isBn) "App Info (অনুমতি)" else "App Info (Unlock)",
+                                                    style = MaterialTheme.typography.labelMedium
+                                                )
+                                            }
+                                            OutlinedButton(
+                                                onClick = onOpenSystemDefaultApps,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("open_system_default_apps_button"),
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isBn) "Default Apps" else "Default Apps",
+                                                    style = MaterialTheme.typography.labelMedium
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -343,6 +412,116 @@ fun SettingsScreen(
                                     Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(if (isBn) "সাইন আউট" else "Sign Out", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 1C. Call Recordings Library (In-Call Recorded Audio)
+                item {
+                    SettingsSectionCard(
+                        title = if (isBn) "কল রেকর্ডিংস (${recordings.size})" else "Call Recordings (${recordings.size})",
+                        icon = Icons.Filled.FiberManualRecord,
+                        iconTint = nova.missed,
+                        trailing = {
+                            IconButton(
+                                onClick = { recordings = CallRecorderManager.listRecordings(context) },
+                                modifier = Modifier.testTag("refresh_recordings_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = "Refresh recordings",
+                                    tint = nova.gold
+                                )
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = if (isBn) {
+                                "কল করার সময় অথবা কল রিসিভ করার পর কল স্ক্রিনের 'রেকর্ড' বাটনে চাপলে অডিও এখানে সেভ হবে। পরিষ্কার ভয়েস পেতে কল চলাকালীন স্পিকার অন রাখতে পারেন।"
+                            } else {
+                                "Tap 'Record' on the call screen during outgoing or answered calls to save recordings here. Turning on Speaker improves remote voice capture on Android 10+."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        if (recordings.isEmpty()) {
+                            Text(
+                                text = if (isBn) "এখনো কোনো কল রেকর্ড করা হয়নি।" else "No call recordings saved yet.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                        } else {
+                            val dateFmt = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                recordings.forEach { rec ->
+                                    val isPlaying = playingRecordingPath == rec.filePath
+                                    val sizeKb = (rec.sizeBytes / 1024L).coerceAtLeast(1L)
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (isPlaying) nova.sim1Container.copy(alpha = 0.55f)
+                                        else MaterialTheme.colorScheme.surfaceContainerHigh
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    val started = CallRecorderManager.togglePlayback(rec.filePath) {
+                                                        playingRecordingPath = null
+                                                    }
+                                                    playingRecordingPath = if (started) rec.filePath else null
+                                                },
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (isPlaying) nova.missed else nova.sim1)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                                                    contentDescription = if (isPlaying) "Stop" else "Play",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = rec.displayTitle,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = "${dateFmt.format(Date(rec.timestampMillis))} • ${sizeKb} KB",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    if (playingRecordingPath == rec.filePath) {
+                                                        playingRecordingPath = null
+                                                    }
+                                                    CallRecorderManager.deleteRecording(rec.filePath)
+                                                    recordings = CallRecorderManager.listRecordings(context)
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.DeleteOutline,
+                                                    contentDescription = strings.delete,
+                                                    tint = nova.missed
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

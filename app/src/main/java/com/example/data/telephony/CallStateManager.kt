@@ -2,6 +2,8 @@ package com.example.data.telephony
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract
@@ -44,7 +46,7 @@ data class ActiveCallUiState(
     val carrierLabel: String? = null,
     val callerIdBadge: String? = null,
     val isSpamCaller: Boolean = false,
-    val lineLabel: String = "NovaCall",
+    val lineLabel: String = "Shajamal",
     val phase: ActiveCallPhase = ActiveCallPhase.CONNECTING,
     val isIncoming: Boolean = false,
     val connectedAtMillis: Long = 0L,
@@ -52,7 +54,10 @@ data class ActiveCallUiState(
     val isSpeakerOn: Boolean = false,
     val isBluetoothAvailable: Boolean = false,
     val isBluetoothOn: Boolean = false,
-    val isOnHold: Boolean = false
+    val isOnHold: Boolean = false,
+    val isRecording: Boolean = false,
+    val recordingStartedAtMillis: Long = 0L,
+    val recordingStatusMessage: String? = null
 )
 
 object CallStateManager {
@@ -103,7 +108,7 @@ object CallStateManager {
                 id.endsWith("2") -> "SIM 2"
                 else -> "SIM 1"
             }
-        } ?: "NovaCall"
+        } ?: "Shajamal"
 
         val offlineInfo = CallerIdIntelligence.detectOffline(rawNumber)
         val initialPhase = mapState(state, isIncoming)
@@ -143,12 +148,16 @@ object CallStateManager {
             }
 
             val (contactName, photoUri) = lookupContact(context, rawNumber)
-            val savedNote = runCatching {
+            val savedNoteEntity = runCatching {
                 dao.getAllCallNotesOnce().firstOrNull {
                     it.normalizedNumber == norm ||
                         (norm.length >= 8 && it.normalizedNumber.endsWith(norm.takeLast(10)))
-                }?.note
+                }
             }.getOrNull()
+            val savedNote = savedNoteEntity?.note
+            val localTaggedName = savedNoteEntity?.contactName?.takeIf {
+                it.isNotBlank() && it != rawNumber && it != norm
+            }
 
             // If caller is NOT saved in device contacts, query Cloud Community Caller ID (or offline operator lookup)
             val cloudLookup = if (contactName.isNullOrBlank()) {
@@ -162,6 +171,7 @@ object CallStateManager {
 
             val resolvedName = contactName
                 ?: cloudLookup?.displayName
+                ?: localTaggedName
                 ?: _activeCall.value?.displayName
                 ?: rawNumber
 
@@ -170,6 +180,7 @@ object CallStateManager {
                 cloudLookup?.isSpam == true -> "SPAM • ${cloudLookup.spamReports} reports"
                 cloudLookup?.source == CallerIdSource.COMMUNITY_CLOUD -> "Shajamal Caller ID"
                 cloudLookup?.source == CallerIdSource.SERVICE_DIRECTORY -> "Verified Service"
+                !localTaggedName.isNullOrBlank() -> "Shajamal Caller ID"
                 else -> null
             }
 
@@ -219,6 +230,7 @@ object CallStateManager {
     fun onCallRemoved(context: Context, call: Call) {
         if (currentCall == call) {
             call.unregisterCallback(callCallback)
+            CallRecorderManager.stopRecording()
             val lastState = _activeCall.value
             currentCall = null
             CallNotificationHelper.cancelActiveCallNotification(context)
@@ -345,6 +357,27 @@ object CallStateManager {
         val route = if (enabled) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_WIRED_OR_EARPIECE
         @Suppress("DEPRECATION")
         runCatching { inCallService?.setAudioRoute(route) }
+        appContext?.let { ctx ->
+            runCatching {
+                val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                if (audioManager != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        if (enabled) {
+                            val speaker = audioManager.availableCommunicationDevices
+                                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                            if (speaker != null) {
+                                audioManager.setCommunicationDevice(speaker)
+                            }
+                        } else {
+                            audioManager.clearCommunicationDevice()
+                        }
+                    } else {
+                        @Suppress("DEPRECATION")
+                        audioManager.isSpeakerphoneOn = enabled
+                    }
+                }
+            }
+        }
         _activeCall.value = _activeCall.value?.copy(isSpeakerOn = enabled, isBluetoothOn = false)
     }
 
@@ -355,6 +388,41 @@ object CallStateManager {
         val currentlyHeld = _activeCall.value?.isOnHold ?: false
         runCatching {
             if (currentlyHeld) call.unhold() else call.hold()
+        }
+        _activeCall.value = _activeCall.value?.copy(isOnHold = !currentlyHeld)
+    }
+
+    fun toggleRecording(context: Context): Boolean {
+        val current = _activeCall.value ?: return false
+        if (current.isRecording) {
+            val savedFile = CallRecorderManager.stopRecording()
+            _activeCall.value = current.copy(
+                isRecording = false,
+                recordingStartedAtMillis = 0L,
+                recordingStatusMessage = if (savedFile != null) "রেকর্ডিং সেভ হয়েছে" else null
+            )
+            return false
+        } else {
+            val label = current.displayName.ifBlank { current.number }
+            val result = CallRecorderManager.startRecording(context, label)
+            return result.fold(
+                onSuccess = {
+                    _activeCall.value = current.copy(
+                        isRecording = true,
+                        recordingStartedAtMillis = System.currentTimeMillis(),
+                        recordingStatusMessage = null
+                    )
+                    true
+                },
+                onFailure = { err ->
+                    _activeCall.value = current.copy(
+                        isRecording = false,
+                        recordingStartedAtMillis = 0L,
+                        recordingStatusMessage = err.localizedMessage ?: "রেকর্ড শুরু করা যায়নি"
+                    )
+                    false
+                }
+            )
         }
     }
 

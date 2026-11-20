@@ -79,6 +79,22 @@ class TelephonyBridgeManager(private val context: Context) {
         runCatching { context.startActivity(intent) }
     }
 
+    fun openAppInfoSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(intent) }
+    }
+
+    fun openSystemDefaultAppsSettings() {
+        val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(intent) }
+            .onFailure { openAppInfoSettings() }
+    }
+
     fun playDialpadSound(symbol: String, style: KeypadSoundStyle, volume: Float) {
         soundEngine.playKey(symbol, style, volume)
     }
@@ -628,6 +644,7 @@ class TelephonyBridgeManager(private val context: Context) {
             CallLog.Calls._ID,
             CallLog.Calls.NUMBER,
             CallLog.Calls.CACHED_NAME,
+            CallLog.Calls.CACHED_PHOTO_URI,
             CallLog.Calls.TYPE,
             CallLog.Calls.DATE,
             CallLog.Calls.DURATION,
@@ -646,6 +663,7 @@ class TelephonyBridgeManager(private val context: Context) {
                 val idIdx = cursor.getColumnIndex(CallLog.Calls._ID)
                 val numIdx = cursor.getColumnIndex(CallLog.Calls.NUMBER)
                 val nameIdx = cursor.getColumnIndex(CallLog.Calls.CACHED_NAME)
+                val photoIdx = cursor.getColumnIndex(CallLog.Calls.CACHED_PHOTO_URI)
                 val typeIdx = cursor.getColumnIndex(CallLog.Calls.TYPE)
                 val dateIdx = cursor.getColumnIndex(CallLog.Calls.DATE)
                 val durIdx = cursor.getColumnIndex(CallLog.Calls.DURATION)
@@ -658,6 +676,7 @@ class TelephonyBridgeManager(private val context: Context) {
                     val number = if (numIdx >= 0) cursor.getString(numIdx).orEmpty() else ""
                     val normalized = normalizePhoneNumber(number)
                     val name = if (nameIdx >= 0) cursor.getString(nameIdx)?.takeIf { it.isNotBlank() } else null
+                    val photoUri = if (photoIdx >= 0) cursor.getString(photoIdx)?.takeIf { it.isNotBlank() } else null
                     val rawType = if (typeIdx >= 0) cursor.getInt(typeIdx) else CallLog.Calls.OUTGOING_TYPE
                     val timestamp = if (dateIdx >= 0) cursor.getLong(dateIdx) else 0L
                     val duration = if (durIdx >= 0) cursor.getLong(durIdx) else 0L
@@ -683,6 +702,7 @@ class TelephonyBridgeManager(private val context: Context) {
                             number = number,
                             normalizedNumber = normalized,
                             contactName = name,
+                            photoUri = photoUri,
                             direction = direction,
                             timestamp = timestamp,
                             durationSeconds = duration,
@@ -694,5 +714,19 @@ class TelephonyBridgeManager(private val context: Context) {
             }
         }
         items
+    }
+
+    @SuppressLint("MissingPermission")
+    suspend fun deleteSystemCallLog(systemRowId: String): Boolean = withContext(Dispatchers.IO) {
+        if (!hasPermission(Manifest.permission.WRITE_CALL_LOG)) return@withContext false
+        if (systemRowId.isBlank()) return@withContext false
+        runCatching {
+            val deleted = context.contentResolver.delete(
+                CallLog.Calls.CONTENT_URI,
+                "${CallLog.Calls._ID} = ?",
+                arrayOf(systemRowId)
+            )
+            deleted > 0
+        }.getOrDefault(false)
     }
 }

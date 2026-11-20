@@ -83,6 +83,13 @@ fun CallerDetailBottomSheet(
     val nova = LocalNovaColors.current
     val isBlocked = state.blockedNumbers.any { it.normalizedNumber == target.normalizedNumber }
     val existingNote = state.callNotes.firstOrNull { it.normalizedNumber == target.normalizedNumber }
+    val matchedPhotoUri = remember(target.normalizedNumber, state.contacts) {
+        val tail = target.normalizedNumber.takeLast(10)
+        state.contacts.firstOrNull {
+            it.normalizedNumber == target.normalizedNumber ||
+                (tail.length >= 8 && it.normalizedNumber.endsWith(tail))
+        }?.photoUri
+    }
     var showSmsTemplates by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
@@ -96,7 +103,11 @@ fun CallerDetailBottomSheet(
                 .padding(bottom = 28.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ContactAvatar(name = target.name ?: target.number, size = 56.dp)
+                ContactAvatar(
+                    name = target.name ?: target.number,
+                    photoUri = matchedPhotoUri,
+                    size = 56.dp
+                )
                 Spacer(modifier = Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
