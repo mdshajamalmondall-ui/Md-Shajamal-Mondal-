@@ -11,11 +11,17 @@ interface NovaCallDao {
     @Query("SELECT * FROM speed_dials ORDER BY digit ASC")
     fun observeSpeedDials(): Flow<List<SpeedDialEntity>>
 
+    @Query("SELECT * FROM speed_dials ORDER BY digit ASC")
+    suspend fun getAllSpeedDialsOnce(): List<SpeedDialEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSpeedDial(entity: SpeedDialEntity)
 
     @Query("DELETE FROM speed_dials WHERE digit = :digit")
     suspend fun deleteSpeedDial(digit: Int)
+
+    @Query("DELETE FROM speed_dials")
+    suspend fun clearSpeedDials()
 
     @Query("SELECT * FROM blocked_numbers ORDER BY blockedAt DESC")
     fun observeBlockedNumbers(): Flow<List<BlockedNumberEntity>>
@@ -29,6 +35,9 @@ interface NovaCallDao {
     @Query("DELETE FROM blocked_numbers WHERE normalizedNumber = :normalizedNumber")
     suspend fun deleteBlockedNumber(normalizedNumber: String)
 
+    @Query("DELETE FROM blocked_numbers")
+    suspend fun clearBlockedNumbers()
+
     @Query("SELECT * FROM call_notes ORDER BY hasReminder DESC, updatedAt DESC")
     fun observeCallNotes(): Flow<List<CallNoteEntity>>
 
@@ -41,8 +50,14 @@ interface NovaCallDao {
     @Query("DELETE FROM call_notes WHERE normalizedNumber = :normalizedNumber")
     suspend fun deleteCallNote(normalizedNumber: String)
 
+    @Query("DELETE FROM call_notes")
+    suspend fun clearCallNotes()
+
     @Query("SELECT * FROM app_call_records ORDER BY timestamp DESC LIMIT 120")
     fun observeAppCallRecords(): Flow<List<AppCallRecordEntity>>
+
+    @Query("SELECT * FROM app_call_records ORDER BY timestamp DESC")
+    suspend fun getAllAppCallRecordsOnce(): List<AppCallRecordEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAppCallRecord(entity: AppCallRecordEntity)

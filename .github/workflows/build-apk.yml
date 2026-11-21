@@ -132,13 +132,12 @@ jobs:
         run: |
           RELEASE_NOTES="Tap Shajamal.apk below to download and install directly on your Android phone.
 
-          Latest updates:
-          - Recents Tap -> Call History (N) Bottom Sheet: Tap any grouped number to view full call history (Outgoing/Incoming/Missed, SIM/Carrier, date/time, duration, single-entry delete), Call Now, Edit Number, and Block/Unblock
-          - Keypad 'Call with' Bottom Sheet: Tap the primary Call button to choose SIM 1 or SIM 2
-          - Recents 3-Dot (⋮) Menu & Filter Chips: Quick Call button + 3-dot menu (Call history, Edit in keypad, Block, Delete History)
-          - Streamlined Themes: Clean Black, White, and Sapphire Ocean themes
-          - 11 Rich Doodle + Atmospheric Background Designs: Phone Doodle, Cosmic Stars, Floral Leaves, Geometric Waves, Hearts & Sparkle, Royal Mandala, Cyber Circuit, Ocean Ripples, Music Beats, Butterfly Breeze, and Aurora Peaks
-          - SIM 1 & SIM 2 Balance Check (live USSD), Call Ringtone & Dialpad Tone Picker, Notifications & Vibration, Block List, and Bengali/English Language"
+          Latest PRO DIALER updates:
+          - Contact Profile: Full-screen contact details, Quick Reply SMS, Number Notes, Call Reminder scheduler, Favorite Group assignment, Spam Report & Full Call History
+          - Call Dashboard: Daily, Weekly & Monthly Call Analytics charts, Dual SIM ratio, Top Contacts & Live Number Search (Smart Caller ID)
+          - Smart Productivity: Favorite Groups (Family/Friends/Office), DND Mode quiet hours, Dual SIM Manager (USSD balance check + SIM aliases + default line), Quick Reply templates & Auto Call Backup (JSON Export/Restore)
+          - Smart Caller ID & Spam Call Protection: Live Caller ID, Spam/Scam Auto-Screening, Business/Delivery Tagging & Spam Reports
+          - Organized Settings: Appearance & Themes (Black, White, Sapphire Ocean + 11 Doodle backgrounds), Calling Preferences, SIM & SIP Settings, Spam & Block List, Backup & Restore, Privacy & Security & About PRO DIALER"
 
           if gh release view latest-apk >/dev/null 2>&1; then
             gh release upload latest-apk Shajamal.apk --clobber

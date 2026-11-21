@@ -3,6 +3,7 @@ package com.example.ui.viewmodel
 import android.Manifest
 import android.app.Application
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.compose.runtime.Immutable
@@ -13,22 +14,27 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.R
 import com.example.data.DialerRepository
+import com.example.data.backup.CallBackupManager
 import com.example.data.cloud.CallerCategory
 import com.example.data.cloud.CallerDirectoryEntry
 import com.example.data.cloud.CallerIdIntelligence
 import com.example.data.cloud.CallerIdLookupResult
 import com.example.data.cloud.CallerIdRepository
+import com.example.data.cloud.CallerIdSource
 import com.example.data.cloud.UserCloudProfile
 import com.example.data.local.AppCallRecordEntity
 import com.example.data.local.BlockedNumberEntity
 import com.example.data.local.CallNoteEntity
-import com.example.data.local.NovaCallDatabase
 import com.example.data.local.PreferencesRepository
 import com.example.data.local.SpeedDialEntity
+import com.example.data.local.NovaCallDatabase
+import com.example.data.model.AnalyticsChartBucket
+import com.example.data.model.AnalyticsPeriod
 import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.BackgroundDoodleStyle
+import com.example.data.model.CallAnalyticsSummary
 import com.example.data.model.CallDirection
 import com.example.data.model.CallDispatchResult
 import com.example.data.model.CallFilterType
@@ -37,10 +43,12 @@ import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.DeviceContact
 import com.example.data.model.DisplayThemeMode
+import com.example.data.model.FavoriteGroup
 import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SimCardInfo
 import com.example.data.model.SlideToAnswerMode
+import com.example.data.model.TopContactStat
 import com.example.data.model.UserPreferences
 import com.example.data.model.normalizePhoneNumber
 import com.example.data.telephony.CallNotificationHelper
@@ -64,6 +72,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOf
@@ -71,6 +80,10 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 enum class NovaTab {
     FAVORITES,
@@ -112,11 +125,19 @@ data class CloudCallerIdSnapshot(
 data class DialerUiState(
     val activeTab: NovaTab = NovaTab.RECENTS,
     val isSettingsOpen: Boolean = false,
+    val isDashboardOpen: Boolean = false,
     val isDefaultDialer: Boolean = false,
     val dialedDigits: String = "",
     val contactSearchQuery: String = "",
     val recentsSearchQuery: String = "",
     val recentsFilter: CallFilterType = CallFilterType.ALL,
+    val selectedFavoriteGroup: FavoriteGroup = FavoriteGroup.ALL,
+    val analyticsPeriod: AnalyticsPeriod = AnalyticsPeriod.WEEKLY,
+    val analyticsSummary: CallAnalyticsSummary = CallAnalyticsSummary(),
+    val numberSearchQuery: String = "",
+    val numberSearchResult: CallerIdLookupResult? = null,
+    val isSearchingNumber: Boolean = false,
+    val profileLookupResult: CallerIdLookupResult? = null,
     val preferences: UserPreferences = UserPreferences(),
     val permissions: PermissionSnapshot = PermissionSnapshot(),
     val simCards: List<SimCardInfo> = emptyList(),
@@ -133,6 +154,7 @@ data class DialerUiState(
     val isDialedBlocked: Boolean = false,
     val todayCallCount: Int = 0,
     val selectedCallerDetail: CallerDetailTarget? = null,
+    val selectedContactProfile: CallerDetailTarget? = null,
     val callHistoryTarget: CallerDetailTarget? = null,
     val routePickerTarget: CallerDetailTarget? = null,
     val isLoadingSystemData: Boolean = false,
@@ -178,11 +200,15 @@ private data class SystemDataSnapshot(
 private data class UiInputSnapshot(
     val activeTab: NovaTab,
     val isSettingsOpen: Boolean,
+    val isDashboardOpen: Boolean,
     val dialedDigits: String,
     val contactSearchQuery: String,
     val recentsSearchQuery: String,
     val recentsFilter: CallFilterType,
+    val selectedFavoriteGroup: FavoriteGroup,
+    val analyticsPeriod: AnalyticsPeriod,
     val selectedCallerDetail: CallerDetailTarget?,
+    val selectedContactProfile: CallerDetailTarget?,
     val callHistoryTarget: CallerDetailTarget?,
     val routePickerTarget: CallerDetailTarget?
 )
@@ -194,10 +220,15 @@ private data class DiagnosticsSnapshot(
     val iccSipStatusText: String? = null,
     val isTestingIccSip: Boolean = false,
     val ispNetworkStatus: IspNetworkStatus? = null,
-    val isCheckingIsp: Boolean = false
+    val isCheckingIsp: Boolean = false,
+    val numberSearchQuery: String = "",
+    val numberSearchResult: CallerIdLookupResult? = null,
+    val isSearchingNumber: Boolean = false,
+    val profileLookupResult: CallerIdLookupResult? = null
 )
 
 class DialerViewModel(
+    private val appContext: Application,
     private val repository: DialerRepository,
     private val telephony: TelephonyBridgeManager,
     private val callerIdRepoFactory: () -> CallerIdRepository?,
@@ -207,11 +238,15 @@ class DialerViewModel(
 
     private val activeTab = MutableStateFlow(NovaTab.RECENTS)
     private val isSettingsOpen = MutableStateFlow(false)
+    private val isDashboardOpen = MutableStateFlow(false)
     private val dialedDigits = MutableStateFlow("")
     private val contactSearchQuery = MutableStateFlow("")
     private val recentsSearchQuery = MutableStateFlow("")
     private val recentsFilter = MutableStateFlow(CallFilterType.ALL)
+    private val selectedFavoriteGroup = MutableStateFlow(FavoriteGroup.ALL)
+    private val analyticsPeriod = MutableStateFlow(AnalyticsPeriod.WEEKLY)
     private val selectedCallerDetail = MutableStateFlow<CallerDetailTarget?>(null)
+    private val selectedContactProfile = MutableStateFlow<CallerDetailTarget?>(null)
     private val callHistoryTarget = MutableStateFlow<CallerDetailTarget?>(null)
     private val routePickerTarget = MutableStateFlow<CallerDetailTarget?>(null)
     private val sim1BalanceText = MutableStateFlow<String?>(null)
@@ -221,6 +256,10 @@ class DialerViewModel(
     private val isTestingIccSip = MutableStateFlow(false)
     private val ispNetworkStatus = MutableStateFlow<IspNetworkStatus?>(null)
     private val isCheckingIsp = MutableStateFlow(false)
+    private val numberSearchQuery = MutableStateFlow("")
+    private val numberSearchResult = MutableStateFlow<CallerIdLookupResult?>(null)
+    private val isSearchingNumber = MutableStateFlow(false)
+    private val profileLookupResult = MutableStateFlow<CallerIdLookupResult?>(null)
 
     @Volatile
     private var callerIdRepository: CallerIdRepository? = null
@@ -232,6 +271,7 @@ class DialerViewModel(
     private val cloudErrorMessage = MutableStateFlow<String?>(null)
     private val hiddenCallLogIds = MutableStateFlow<Set<String>>(emptySet())
     private var lookupJob: Job? = null
+    private var numberSearchJob: Job? = null
     private var refreshJob: Job? = null
     private var lastSystemRefreshMs: Long = 0L
 
@@ -247,6 +287,8 @@ class DialerViewModel(
     @Volatile private var lastFilteredContacts: List<DeviceContact> = emptyList()
     @Volatile private var lastFilteredLogsKey: Any? = null
     @Volatile private var lastFilteredLogs: List<CallLogItem> = emptyList()
+    @Volatile private var lastAnalyticsKey: Any? = null
+    @Volatile private var lastAnalyticsSummary: CallAnalyticsSummary = CallAnalyticsSummary()
 
     private val initialPerms: PermissionSnapshot = currentPermissions()
 
@@ -290,6 +332,15 @@ class DialerViewModel(
         LocalRoomSnapshot(speedDials, blocked, notes, records, prefs)
     }
 
+    private val numberLookupSnapshotFlow = combine(
+        numberSearchQuery,
+        numberSearchResult,
+        isSearchingNumber,
+        profileLookupResult
+    ) { q, res, busy, prof ->
+        arrayOf<Any?>(q, res, busy, prof)
+    }
+
     private val diagnosticsFlow = combine(
         combine(sim1BalanceText, sim2BalanceText, checkingBalanceSlot) { b1, b2, slot -> Triple(b1, b2, slot) },
         combine(iccSipStatusText, isTestingIccSip, ispNetworkStatus, isCheckingIsp) { sipTxt, testing, isp, checking ->
@@ -299,32 +350,43 @@ class DialerViewModel(
                 ispNetworkStatus = isp,
                 isCheckingIsp = checking
             )
-        }
-    ) { bal, net ->
+        },
+        numberLookupSnapshotFlow
+    ) { bal, net, lookupArr ->
         net.copy(
             sim1BalanceText = bal.first,
             sim2BalanceText = bal.second,
-            checkingBalanceSlot = bal.third
+            checkingBalanceSlot = bal.third,
+            numberSearchQuery = lookupArr[0] as String,
+            numberSearchResult = lookupArr[1] as CallerIdLookupResult?,
+            isSearchingNumber = lookupArr[2] as Boolean,
+            profileLookupResult = lookupArr[3] as CallerIdLookupResult?
         )
     }
 
     private val uiInputFlow = combine(
-        combine(activeTab, isSettingsOpen) { t, s -> t to s },
+        combine(activeTab, isSettingsOpen, isDashboardOpen) { t, s, d -> Triple(t, s, d) },
         dialedDigits,
         combine(contactSearchQuery, recentsSearchQuery) { cq, rq -> cq to rq },
-        recentsFilter,
-        combine(selectedCallerDetail, callHistoryTarget, routePickerTarget) { d, h, r -> Triple(d, h, r) }
-    ) { nav, digits, queries, filter, overlays ->
+        combine(recentsFilter, selectedFavoriteGroup, analyticsPeriod) { f, grp, per -> Triple(f, grp, per) },
+        combine(selectedCallerDetail, selectedContactProfile, callHistoryTarget, routePickerTarget) { d, p, h, r ->
+            listOf(d, p, h, r)
+        }
+    ) { nav, digits, queries, filters, overlays ->
         UiInputSnapshot(
             activeTab = nav.first,
             isSettingsOpen = nav.second,
+            isDashboardOpen = nav.third,
             dialedDigits = digits,
             contactSearchQuery = queries.first,
             recentsSearchQuery = queries.second,
-            recentsFilter = filter,
-            selectedCallerDetail = overlays.first,
-            callHistoryTarget = overlays.second,
-            routePickerTarget = overlays.third
+            recentsFilter = filters.first,
+            selectedFavoriteGroup = filters.second,
+            analyticsPeriod = filters.third,
+            selectedCallerDetail = overlays[0],
+            selectedContactProfile = overlays[1],
+            callHistoryTarget = overlays[2],
+            routePickerTarget = overlays[3]
         )
     }
 
@@ -355,6 +417,21 @@ class DialerViewModel(
             lastMergedLogs = computed
             lastMergedKey = mergedKey
             computed
+        }
+
+        val analyticsKey = listOf(input.analyticsPeriod, mergedLogs, room.blockedNumbers.size, room.preferences.language)
+        val analytics = if (analyticsKey == lastAnalyticsKey) {
+            lastAnalyticsSummary
+        } else {
+            computeAnalyticsSummary(
+                period = input.analyticsPeriod,
+                logs = mergedLogs,
+                blockedCount = room.blockedNumbers.size,
+                isBn = room.preferences.language == AppLanguage.BENGALI
+            ).also {
+                lastAnalyticsSummary = it
+                lastAnalyticsKey = analyticsKey
+            }
         }
 
         val normalizedDial = normalizePhoneNumber(input.dialedDigits)
@@ -408,11 +485,19 @@ class DialerViewModel(
         DialerUiState(
             activeTab = input.activeTab,
             isSettingsOpen = input.isSettingsOpen,
+            isDashboardOpen = input.isDashboardOpen,
             isDefaultDialer = sys.isDefaultDialer,
             dialedDigits = input.dialedDigits,
             contactSearchQuery = input.contactSearchQuery,
             recentsSearchQuery = input.recentsSearchQuery,
             recentsFilter = input.recentsFilter,
+            selectedFavoriteGroup = input.selectedFavoriteGroup,
+            analyticsPeriod = input.analyticsPeriod,
+            analyticsSummary = analytics,
+            numberSearchQuery = diag.numberSearchQuery,
+            numberSearchResult = diag.numberSearchResult,
+            isSearchingNumber = diag.isSearchingNumber,
+            profileLookupResult = diag.profileLookupResult,
             preferences = room.preferences,
             permissions = sys.permissions,
             simCards = sys.simCards,
@@ -429,6 +514,7 @@ class DialerViewModel(
             isDialedBlocked = isBlocked,
             todayCallCount = lastTodayCount,
             selectedCallerDetail = input.selectedCallerDetail,
+            selectedContactProfile = input.selectedContactProfile,
             callHistoryTarget = input.callHistoryTarget,
             routePickerTarget = input.routePickerTarget,
             isLoadingSystemData = sys.isLoading,
@@ -494,10 +580,32 @@ class DialerViewModel(
                     refreshSimsOnly(uiState.value.preferences)
                 }
         }
+        // Auto Call Backup watcher: writes a background JSON snapshot when enabled and local records update
+        viewModelScope.launch(Dispatchers.IO) {
+            roomSnapshotFlow
+                .drop(1)
+                .collect { snapshot ->
+                    if (snapshot.preferences.autoCallBackupEnabled) {
+                        val now = System.currentTimeMillis()
+                        if (now - snapshot.preferences.lastBackupTimestamp >= 60_000L) {
+                            runCatching {
+                                val json = CallBackupManager.buildBackupJson(
+                                    repository = repository,
+                                    systemCallLogs = systemSnapshot.value.systemCallLogs,
+                                    preferences = snapshot.preferences
+                                )
+                                CallBackupManager.writeAutoLocalSnapshot(appContext, json)
+                                repository.updateLastBackupTimestamp(now)
+                            }
+                        }
+                    }
+                }
+        }
     }
 
     override fun onCleared() {
         lookupJob?.cancel()
+        numberSearchJob?.cancel()
         refreshJob?.cancel()
         telephony.releaseToneGenerator()
         super.onCleared()
@@ -868,8 +976,320 @@ class DialerViewModel(
         isSettingsOpen.value = false
     }
 
+    fun openDashboard() {
+        isSettingsOpen.value = false
+        selectedContactProfile.value = null
+        isDashboardOpen.value = true
+    }
+
+    fun closeDashboard() {
+        isDashboardOpen.value = false
+    }
+
+    fun selectAnalyticsPeriod(period: AnalyticsPeriod) {
+        analyticsPeriod.value = period
+    }
+
+    fun openContactProfile(number: String, name: String?) {
+        val clean = number.trim()
+        if (clean.isEmpty()) return
+        val norm = normalizePhoneNumber(clean)
+        val resolvedName = name?.takeIf { it.isNotBlank() }
+            ?: resolveContactName(clean, systemSnapshot.value.contacts)
+            ?: resolveLocalTagName(clean, uiState.value.callNotes)
+        selectedContactProfile.value = CallerDetailTarget(
+            number = clean,
+            normalizedNumber = norm,
+            name = resolvedName
+        )
+        profileLookupResult.value = CallerIdIntelligence.detectOffline(clean)
+        val repo = callerIdRepository
+        if (repo != null && norm.filter { it.isDigit() }.length >= 4) {
+            viewModelScope.launch {
+                val res = repo.lookupNumber(clean)
+                if (selectedContactProfile.value?.normalizedNumber == norm && res != null) {
+                    profileLookupResult.value = res
+                }
+            }
+        }
+    }
+
+    fun closeContactProfile() {
+        selectedContactProfile.value = null
+        profileLookupResult.value = null
+    }
+
+    fun selectFavoriteGroup(group: FavoriteGroup) {
+        selectedFavoriteGroup.value = group
+    }
+
+    fun assignFavoriteGroup(number: String, group: FavoriteGroup) = viewModelScope.launch {
+        val norm = normalizePhoneNumber(number)
+        if (norm.isBlank()) return@launch
+        val tail = norm.takeLast(10)
+        val updated = uiState.value.preferences.favoriteGroups.toMutableMap()
+        val matchingKeys = updated.keys.filter { it == norm || (tail.length >= 8 && it.endsWith(tail)) }
+        matchingKeys.forEach { updated.remove(it) }
+        if (group != FavoriteGroup.ALL) {
+            updated[norm] = group
+        }
+        repository.updateFavoriteGroups(updated)
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        val grpLabel = if (isBn) group.labelBn else group.labelEn
+        emitMessage(
+            if (group == FavoriteGroup.ALL) {
+                if (isBn) "গ্রুপ সরানো হয়েছে" else "Removed from group"
+            } else {
+                if (isBn) "$grpLabel গ্রুপে যুক্ত হয়েছে" else "Assigned to $grpLabel group"
+            }
+        )
+    }
+
+    fun toggleFavoriteByNumber(number: String, name: String?) = viewModelScope.launch {
+        val norm = normalizePhoneNumber(number)
+        if (norm.isBlank()) return@launch
+        val tail = norm.takeLast(10)
+        val currentFavs = uiState.value.preferences.favoriteNumbers
+        val isPinned = currentFavs.any { it == norm || (tail.length >= 8 && it.endsWith(tail)) } ||
+            uiState.value.favoriteContacts.any {
+                it.normalizedNumber == norm || (tail.length >= 8 && it.normalizedNumber.endsWith(tail))
+            }
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        if (isPinned) {
+            val updated = currentFavs.filterNot {
+                it == norm || (tail.length >= 8 && it.endsWith(tail))
+            }.toSet()
+            repository.updateFavoriteNumbers(updated)
+            uiState.value.speedDials
+                .firstOrNull { it.normalizedNumber == norm || (tail.length >= 8 && it.normalizedNumber.endsWith(tail)) }
+                ?.let { repository.removeSpeedDial(it.digit) }
+            emitMessage(if (isBn) "প্রিয় তালিকা থেকে সরানো হয়েছে" else "Removed from Favorites")
+        } else {
+            repository.updateFavoriteNumbers(currentFavs + norm)
+            val label = name?.takeIf { it.isNotBlank() } ?: number
+            emitMessage(if (isBn) "$label প্রিয় তালিকায় যোগ হয়েছে ★" else "Added $label to Favorites ★")
+        }
+    }
+
+    fun scheduleCallReminder(
+        number: String,
+        name: String,
+        note: String,
+        delayMinutes: Long
+    ) = viewModelScope.launch {
+        val norm = normalizePhoneNumber(number)
+        if (norm.isBlank()) return@launch
+        val triggerAt = System.currentTimeMillis() + (delayMinutes.coerceAtLeast(1L) * 60_000L)
+        val cleanName = name.trim().ifBlank { resolveContactName(number, uiState.value.contacts) ?: number }
+        val cleanNote = note.trim().ifBlank {
+            if (uiState.value.preferences.language == AppLanguage.BENGALI) "কল ব্যাক রিমাইন্ডার" else "Callback reminder"
+        }
+        repository.saveCallNote(number, cleanName, cleanNote, hasReminder = true)
+        val updatedReminders = uiState.value.preferences.callReminderTimestamps.toMutableMap()
+        updatedReminders[norm] = triggerAt
+        repository.updateCallReminderTimestamps(updatedReminders)
+        CallNotificationHelper.scheduleCallReminder(
+            context = appContext,
+            normalizedNumber = norm,
+            displayNumber = number,
+            contactName = cleanName,
+            note = cleanNote,
+            triggerAtMillis = triggerAt
+        )
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        val formattedTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(triggerAt))
+        emitMessage(
+            if (isBn) "কল রিমাইন্ডার সেট হয়েছে ($formattedTime)"
+            else "Call reminder scheduled for $formattedTime"
+        )
+    }
+
+    fun clearCallReminder(number: String) = viewModelScope.launch {
+        val norm = normalizePhoneNumber(number)
+        if (norm.isBlank()) return@launch
+        val tail = norm.takeLast(10)
+        val updated = uiState.value.preferences.callReminderTimestamps.filterKeys { key ->
+            !(key == norm || (tail.length >= 8 && key.endsWith(tail)))
+        }
+        repository.updateCallReminderTimestamps(updated)
+        CallNotificationHelper.cancelCallReminder(appContext, norm)
+        val existingNote = uiState.value.callNotes.firstOrNull {
+            it.normalizedNumber == norm || (tail.length >= 8 && it.normalizedNumber.endsWith(tail))
+        }
+        if (existingNote != null) {
+            repository.saveCallNote(existingNote.displayNumber, existingNote.contactName, existingNote.note, hasReminder = false)
+        }
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(if (isBn) "রিমাইন্ডার বাতিল হয়েছে" else "Reminder cleared")
+    }
+
+    fun searchNumberDirectory(query: String) {
+        numberSearchQuery.value = query
+        numberSearchJob?.cancel()
+        val digits = query.filter { it.isDigit() }
+        if (digits.length < 3) {
+            numberSearchResult.value = null
+            isSearchingNumber.value = false
+            return
+        }
+        val localContact = resolveContact(query, uiState.value.contacts)
+        val norm = normalizePhoneNumber(query)
+        val tail = norm.takeLast(10)
+        val localNote = uiState.value.callNotes.firstOrNull {
+            it.normalizedNumber == norm || (tail.length >= 8 && it.normalizedNumber.endsWith(tail))
+        }
+        val offline = CallerIdIntelligence.detectOffline(query)
+        if (localContact != null) {
+            numberSearchResult.value = CallerIdLookupResult(
+                phoneKey = norm,
+                displayName = localContact.name,
+                carrierOrRegion = offline?.carrierOrRegion.orEmpty().ifBlank { "Saved Contact" },
+                category = CallerCategory.PERSONAL,
+                source = CallerIdSource.LOCAL_CONTACT
+            )
+        } else if (localNote != null && localNote.contactName.isNotBlank()) {
+            numberSearchResult.value = (offline ?: CallerIdLookupResult(
+                phoneKey = norm,
+                displayName = localNote.contactName,
+                carrierOrRegion = ""
+            )).copy(
+                displayName = localNote.contactName,
+                source = CallerIdSource.COMMUNITY_CLOUD
+            )
+        } else {
+            numberSearchResult.value = offline
+        }
+
+        val repo = callerIdRepository
+        if (repo != null && digits.length >= 4) {
+            numberSearchJob = viewModelScope.launch {
+                delay(280L)
+                isSearchingNumber.value = true
+                val cloudRes = repo.lookupNumber(query)
+                if (numberSearchQuery.value == query && cloudRes != null) {
+                    if (localContact == null || !cloudRes.isSpam) {
+                        numberSearchResult.value = if (localContact != null && cloudRes.displayName.isNullOrBlank()) {
+                            CallerIdLookupResult(
+                                phoneKey = norm,
+                                displayName = localContact.name,
+                                carrierOrRegion = cloudRes.carrierOrRegion,
+                                category = cloudRes.category,
+                                spamReports = cloudRes.spamReports,
+                                source = CallerIdSource.LOCAL_CONTACT
+                            )
+                        } else {
+                            cloudRes
+                        }
+                    }
+                }
+                isSearchingNumber.value = false
+            }
+        }
+    }
+
+    fun reportSpamNumber(number: String, label: String, alsoBlock: Boolean = true) {
+        viewModelScope.launch {
+            val cleanNum = number.trim()
+            if (cleanNum.isBlank()) return@launch
+            val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+            val cleanLabel = label.trim().ifBlank { if (isBn) "স্প্যাম কলার" else "Spam Caller" }
+            if (alsoBlock) {
+                repository.blockNumber(cleanNum, cleanLabel, "Spam Report")
+            }
+            val repo = callerIdRepository
+            if (repo != null) {
+                repo.publishCallerTag(cleanNum, cleanLabel, CallerCategory.SPAM, markAsSpam = true)
+            } else {
+                repository.saveCallNote(cleanNum, cleanLabel, "Reported as Spam", hasReminder = false)
+            }
+            if (normalizePhoneNumber(numberSearchQuery.value) == normalizePhoneNumber(cleanNum)) {
+                searchNumberDirectory(cleanNum)
+            }
+            if (selectedContactProfile.value?.normalizedNumber == normalizePhoneNumber(cleanNum)) {
+                openContactProfile(cleanNum, cleanLabel)
+            }
+            emitMessage(
+                if (isBn) "$cleanNum স্প্যাম হিসেবে রিপোর্ট করা হয়েছে"
+                else "Reported $cleanNum as Spam"
+            )
+        }
+    }
+
+    fun updateDndConfig(
+        enabled: Boolean,
+        startMinutes: Int = uiState.value.preferences.dndStartMinutes,
+        endMinutes: Int = uiState.value.preferences.dndEndMinutes,
+        allowFavorites: Boolean = uiState.value.preferences.dndAllowFavorites
+    ) = viewModelScope.launch {
+        repository.updateDndConfig(enabled, startMinutes, endMinutes, allowFavorites)
+    }
+
+    fun updateSpamProtection(enabled: Boolean) = viewModelScope.launch {
+        repository.updateSpamProtection(enabled)
+    }
+
+    fun updateAutoCallBackup(enabled: Boolean) = viewModelScope.launch {
+        repository.updateAutoCallBackup(enabled)
+        if (enabled) {
+            val prefs = uiState.value.preferences
+            val json = CallBackupManager.buildBackupJson(repository, systemSnapshot.value.systemCallLogs, prefs)
+            val res = CallBackupManager.writeAutoLocalSnapshot(appContext, json)
+            if (res.isSuccess) {
+                repository.updateLastBackupTimestamp(System.currentTimeMillis())
+            }
+        }
+    }
+
+    fun exportBackupToUri(uri: Uri) = viewModelScope.launch {
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        val json = CallBackupManager.buildBackupJson(
+            repository = repository,
+            systemCallLogs = systemSnapshot.value.systemCallLogs,
+            preferences = uiState.value.preferences
+        )
+        val res = CallBackupManager.writeBackupToUri(appContext, uri, json)
+        res.onSuccess {
+            repository.updateLastBackupTimestamp(System.currentTimeMillis())
+            emitMessage(if (isBn) "কল ব্যাকআপ ফাইল সেভ হয়েছে" else "Call backup exported successfully")
+        }.onFailure { err ->
+            emitMessage(
+                if (isBn) "ব্যাকআপ ব্যর্থ: ${err.localizedMessage.orEmpty()}"
+                else "Backup failed: ${err.localizedMessage.orEmpty()}"
+            )
+        }
+    }
+
+    fun importBackupFromUri(uri: Uri) = viewModelScope.launch {
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        val res = CallBackupManager.restoreBackupFromUri(
+            context = appContext,
+            uri = uri,
+            repository = repository,
+            currentPreferences = uiState.value.preferences
+        )
+        res.onSuccess { summary ->
+            emitMessage(
+                if (isBn) "রিস্টোর সম্পন্ন: ${summary.restoredCalls} কল, ${summary.restoredNotes} নোট, ${summary.restoredFavorites} প্রিয়জন"
+                else "Restored ${summary.restoredCalls} calls, ${summary.restoredNotes} notes, ${summary.restoredFavorites} favorites"
+            )
+        }.onFailure { err ->
+            emitMessage(
+                if (isBn) "রিস্টোর ব্যর্থ: ${err.localizedMessage.orEmpty()}"
+                else "Restore failed: ${err.localizedMessage.orEmpty()}"
+            )
+        }
+    }
+
+    fun clearLocalUserData() = viewModelScope.launch {
+        repository.clearAllLocalUserData()
+        val isBn = uiState.value.preferences.language == AppLanguage.BENGALI
+        emitMessage(if (isBn) "লোকাল কল ডাটা ও নোট মুছে ফেলা হয়েছে" else "Local call history & notes cleared")
+    }
+
     fun selectTab(tab: NovaTab) {
         isSettingsOpen.value = false
+        isDashboardOpen.value = false
+        selectedContactProfile.value = null
         activeTab.value = tab
     }
 
@@ -1568,6 +1988,150 @@ class DialerViewModel(
         return sb.toString()
     }
 
+    private fun computeAnalyticsSummary(
+        period: AnalyticsPeriod,
+        logs: List<CallLogItem>,
+        blockedCount: Int,
+        isBn: Boolean
+    ): CallAnalyticsSummary {
+        val now = System.currentTimeMillis()
+        val cal = Calendar.getInstance()
+        val windowStart = when (period) {
+            AnalyticsPeriod.DAILY -> {
+                cal.timeInMillis = now
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.timeInMillis
+            }
+            AnalyticsPeriod.WEEKLY -> now - (6L * 24L * 60L * 60L * 1000L)
+            AnalyticsPeriod.MONTHLY -> now - (27L * 24L * 60L * 60L * 1000L)
+        }
+        val filtered = logs.filter { it.timestamp >= windowStart }
+
+        var outgoing = 0
+        var incoming = 0
+        var missed = 0
+        var totalDuration = 0L
+        var sim1Count = 0
+        var sim2Count = 0
+        val contactAgg = LinkedHashMap<String, MutableList<CallLogItem>>()
+
+        for (item in filtered) {
+            when (item.direction) {
+                CallDirection.OUTGOING -> outgoing++
+                CallDirection.INCOMING -> incoming++
+                CallDirection.MISSED, CallDirection.REJECTED -> missed++
+            }
+            totalDuration += item.durationSeconds
+            when (item.route) {
+                CallRoute.SIM_2 -> sim2Count++
+                else -> sim1Count++
+            }
+            val key = item.normalizedNumber.takeLast(10).ifBlank { item.number }
+            if (key.isNotBlank()) {
+                contactAgg.getOrPut(key) { ArrayList(4) }.add(item)
+            }
+        }
+
+        val buckets = when (period) {
+            AnalyticsPeriod.DAILY -> {
+                val labels = if (isBn) listOf("০-৪", "৪-৮", "৮-১২", "১২-১৬", "১৬-২০", "২০-২৪")
+                else listOf("0-4h", "4-8h", "8-12h", "12-16h", "16-20h", "20-24h")
+                val outArr = IntArray(6)
+                val inArr = IntArray(6)
+                val missArr = IntArray(6)
+                for (item in filtered) {
+                    cal.timeInMillis = item.timestamp
+                    val slot = (cal.get(Calendar.HOUR_OF_DAY) / 4).coerceIn(0, 5)
+                    when (item.direction) {
+                        CallDirection.OUTGOING -> outArr[slot]++
+                        CallDirection.INCOMING -> inArr[slot]++
+                        CallDirection.MISSED, CallDirection.REJECTED -> missArr[slot]++
+                    }
+                }
+                labels.indices.map { idx ->
+                    AnalyticsChartBucket(labels[idx], outArr[idx], inArr[idx], missArr[idx])
+                }
+            }
+            AnalyticsPeriod.WEEKLY -> {
+                val dayFmt = SimpleDateFormat("EEE", Locale.getDefault())
+                val bucketsList = ArrayList<AnalyticsChartBucket>(7)
+                for (offset in 6 downTo 0) {
+                    cal.timeInMillis = now - (offset * 24L * 60L * 60L * 1000L)
+                    val targetYear = cal.get(Calendar.YEAR)
+                    val targetDay = cal.get(Calendar.DAY_OF_YEAR)
+                    val label = dayFmt.format(cal.time).take(3)
+                    var o = 0
+                    var i = 0
+                    var m = 0
+                    for (item in filtered) {
+                        cal.timeInMillis = item.timestamp
+                        if (cal.get(Calendar.YEAR) == targetYear && cal.get(Calendar.DAY_OF_YEAR) == targetDay) {
+                            when (item.direction) {
+                                CallDirection.OUTGOING -> o++
+                                CallDirection.INCOMING -> i++
+                                CallDirection.MISSED, CallDirection.REJECTED -> m++
+                            }
+                        }
+                    }
+                    bucketsList.add(AnalyticsChartBucket(label, o, i, m))
+                }
+                bucketsList
+            }
+            AnalyticsPeriod.MONTHLY -> {
+                val labels = if (isBn) listOf("১ম স.", "২য় স.", "৩য় স.", "৪র্থ স.")
+                else listOf("W1", "W2", "W3", "W4")
+                val outArr = IntArray(4)
+                val inArr = IntArray(4)
+                val missArr = IntArray(4)
+                val weekMs = 7L * 24L * 60L * 60L * 1000L
+                for (item in filtered) {
+                    val ageWeeks = ((now - item.timestamp).coerceAtLeast(0L) / weekMs).toInt().coerceIn(0, 3)
+                    val idx = 3 - ageWeeks
+                    when (item.direction) {
+                        CallDirection.OUTGOING -> outArr[idx]++
+                        CallDirection.INCOMING -> inArr[idx]++
+                        CallDirection.MISSED, CallDirection.REJECTED -> missArr[idx]++
+                    }
+                }
+                labels.indices.map { idx ->
+                    AnalyticsChartBucket(labels[idx], outArr[idx], inArr[idx], missArr[idx])
+                }
+            }
+        }
+
+        val topContacts = contactAgg.values
+            .sortedByDescending { it.size }
+            .take(5)
+            .map { entries ->
+                val latest = entries.first()
+                TopContactStat(
+                    displayName = entries.firstOrNull { !it.contactName.isNullOrBlank() }?.contactName
+                        ?: latest.number,
+                    number = latest.number,
+                    photoUri = entries.firstOrNull { !it.photoUri.isNullOrBlank() }?.photoUri,
+                    callCount = entries.size,
+                    totalDurationSeconds = entries.sumOf { it.durationSeconds }
+                )
+            }
+
+        return CallAnalyticsSummary(
+            period = period,
+            totalCalls = filtered.size,
+            outgoingCalls = outgoing,
+            incomingCalls = incoming,
+            missedCalls = missed,
+            totalDurationSeconds = totalDuration,
+            sim1Calls = sim1Count,
+            sim2Calls = sim2Count,
+            blockedCount = blockedCount,
+            buckets = buckets,
+            topContacts = topContacts
+        )
+    }
+
     companion object {
         private const val TAG = "DialerVM"
 
@@ -1594,6 +2158,7 @@ class DialerViewModel(
                 val dialerRepo = DialerRepository(roomDb.novaCallDao(), prefsRepo)
                 val telephony = TelephonyBridgeManager(application)
                 DialerViewModel(
+                    appContext = application,
                     repository = dialerRepo,
                     telephony = telephony,
                     callerIdRepoFactory = callerIdRepoFactory,

@@ -23,18 +23,31 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.DoNotDisturbOn
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.SettingsPhone
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SimCard
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +64,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,47 +79,82 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.model.AppFontScale
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemePalette
 import com.example.data.model.BackgroundDoodleStyle
+import com.example.data.model.DefaultRoutePreference
+import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
+import com.example.data.model.SlideToAnswerMode
 import com.example.data.model.formatDisplayNumber
 import com.example.ui.components.DoodleStylePicker
 import com.example.ui.components.ThemePalettePicker
 import com.example.ui.i18n.NovaStrings
 import com.example.ui.theme.LocalNovaColors
 import com.example.ui.viewmodel.DialerUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     state: DialerUiState,
     strings: NovaStrings,
+    signedInEmail: String?,
     onBack: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
     onOpenAppInfoSettings: () -> Unit,
     onOpenSystemDefaultApps: () -> Unit,
-    onCheckSimBalance: (Int) -> Unit,
-    onSaveSimBalanceUssd: (Int, String) -> Unit,
-    defaultUssdForSlot: (Int) -> String,
+    // Appearance & Themes
     onSelectThemePalette: (AppThemePalette) -> Unit,
     onSelectBackgroundDoodle: (BackgroundDoodleStyle) -> Unit,
+    onToggleLiquidGlass: (Boolean) -> Unit,
+    onSelectFontScale: (AppFontScale) -> Unit,
+    onToggleLanguage: (AppLanguage) -> Unit,
+    // Calling Preferences
     onPickRingtone: () -> Unit,
     onOpenSystemSoundSettings: () -> Unit,
     onToggleDtmfSound: (Boolean) -> Unit,
     onSelectSoundStyle: (KeypadSoundStyle) -> Unit,
     onChangeSoundVolume: (Float) -> Unit,
     onPreviewSound: () -> Unit,
+    onToggleVibrateOnRing: (Boolean) -> Unit,
+    onToggleHaptic: (Boolean) -> Unit,
+    onToggleAutoSpeaker: (Boolean) -> Unit,
+    onSelectIncomingCallStyle: (IncomingCallDisplayStyle) -> Unit,
+    onSelectSlideToAnswerMode: (SlideToAnswerMode) -> Unit,
+    onAddQuickReply: (String) -> Unit,
+    onRemoveQuickReply: (String) -> Unit,
+    onUpdateDndConfig: (enabled: Boolean, startMinutes: Int, endMinutes: Int, allowFavorites: Boolean) -> Unit,
+    // SIM & SIP Settings
+    onSelectDefaultRoute: (DefaultRoutePreference) -> Unit,
+    onSaveSimAlias: (Int, String) -> Unit,
+    onCheckSimBalance: (Int) -> Unit,
+    onSaveSimBalanceUssd: (Int, String) -> Unit,
+    defaultUssdForSlot: (Int) -> String,
+    onOpenSipCallingAccounts: () -> Unit,
+    // Spam & Block List
+    onToggleCloudCallerId: (Boolean) -> Unit,
+    onToggleSpamProtection: (Boolean) -> Unit,
+    onSyncCommunityContacts: () -> Unit,
+    onOpenNumberSearchDashboard: () -> Unit,
+    onOpenReportSpamDialog: () -> Unit,
+    onToggleAutoRejectBlocked: (Boolean) -> Unit,
+    onOpenAddBlockDialog: () -> Unit,
+    onUnblockNumber: (String) -> Unit,
+    // Backup & Restore
+    onToggleAutoCallBackup: (Boolean) -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
+    // Privacy & Security
     onOpenSystemNotificationSettings: () -> Unit,
     onToggleNotifyIncoming: (Boolean) -> Unit,
     onToggleNotifyMissed: (Boolean) -> Unit,
     onToggleNotifyOngoing: (Boolean) -> Unit,
-    onToggleVibrateOnRing: (Boolean) -> Unit,
-    onToggleHaptic: (Boolean) -> Unit,
-    onToggleAutoRejectBlocked: (Boolean) -> Unit,
-    onOpenAddBlockDialog: () -> Unit,
-    onUnblockNumber: (String) -> Unit,
-    onToggleLanguage: (AppLanguage) -> Unit,
+    onClearLocalUserData: () -> Unit,
+    onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val nova = LocalNovaColors.current
@@ -117,6 +166,16 @@ fun SettingsScreen(
     var sim2UssdInput by remember(state.preferences.sim2BalanceUssd, state.sim2.carrierName) {
         mutableStateOf(state.preferences.sim2BalanceUssd.ifBlank { defaultUssdForSlot(1) })
     }
+    var sim1AliasInput by remember(state.preferences.sim1Alias) {
+        mutableStateOf(state.preferences.sim1Alias)
+    }
+    var sim2AliasInput by remember(state.preferences.sim2Alias) {
+        mutableStateOf(state.preferences.sim2Alias)
+    }
+    var quickReplyDraft by remember { mutableStateOf("") }
+    var showClearDataConfirm by remember { mutableStateOf(false) }
+
+    val dateFmt = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
 
     Box(
         modifier = modifier
@@ -147,11 +206,18 @@ fun SettingsScreen(
                     )
                 }
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (isBn) "সেটিংস" else "Settings",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+                Column {
+                    Text(
+                        text = if (isBn) "সেটিংস" else "Settings",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Shajamal PRO DIALER",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             LazyColumn(
@@ -161,7 +227,7 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(top = 4.dp, bottom = 36.dp)
             ) {
-                // 1. Default Phone App (Shown ONLY when Shajamal is not yet the default dialer)
+                // Default Phone App banner (shown only when Shajamal is not default dialer)
                 if (!state.isDefaultDialer) {
                     item(key = "default_dialer") {
                         Surface(
@@ -184,12 +250,7 @@ fun SettingsScreen(
                                             .background(nova.gold.copy(alpha = 0.22f)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.PhoneAndroid,
-                                            contentDescription = null,
-                                            tint = nova.gold,
-                                            modifier = Modifier.size(22.dp)
-                                        )
+                                        Icon(Icons.Filled.PhoneAndroid, contentDescription = null, tint = nova.gold, modifier = Modifier.size(22.dp))
                                     }
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
@@ -201,7 +262,7 @@ fun SettingsScreen(
                                             text = if (isBn) {
                                                 "সব ইনকামিং ও আউটগোয়িং কল সরাসরি Shajamal-এ আনতে এটি অন করুন।"
                                             } else {
-                                                "Enable so all incoming and outgoing calls stay directly inside Shajamal."
+                                                "Enable so all incoming & outgoing calls stay directly inside Shajamal."
                                             },
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -223,29 +284,11 @@ fun SettingsScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = onOpenAppInfoSettings,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("open_app_info_restricted_button"),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Text(
-                                            text = if (isBn) "App Info" else "App Info",
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
+                                    OutlinedButton(onClick = onOpenAppInfoSettings, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                                        Text("App Info", style = MaterialTheme.typography.labelMedium)
                                     }
-                                    OutlinedButton(
-                                        onClick = onOpenSystemDefaultApps,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("open_system_default_apps_button"),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Text(
-                                            text = "Default Apps",
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
+                                    OutlinedButton(onClick = onOpenSystemDefaultApps, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                                        Text("Default Apps", style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
                             }
@@ -253,68 +296,10 @@ fun SettingsScreen(
                     }
                 }
 
-                // 2. SIM 1 & SIM 2 Balance Check (Real USSD)
-                item(key = "sim_balance") {
+                // 1. APPEARANCE & THEMES
+                item(key = "appearance_and_themes") {
                     SettingsSectionCard(
-                        title = if (isBn) "SIM 1 ও SIM 2 ব্যালেন্স চেক" else "SIM 1 & SIM 2 Balance Check",
-                        icon = Icons.Filled.AccountBalanceWallet,
-                        iconTint = nova.sim1
-                    ) {
-                        Text(
-                            text = if (isBn) {
-                                "সিমের অপারেটর অনুযায়ী অটো USSD কোড সেট করা আছে। চাইলে নিজের কোড পরিবর্তন করে সরাসরি ব্যালেন্স চেক করুন।"
-                            } else {
-                                "Carrier USSD codes are auto-detected. Customize the USSD code if needed and check live SIM balance."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        SimBalanceRow(
-                            slotIndex = 0,
-                            simTitle = "SIM 1",
-                            carrierName = state.sim1.displayName.ifBlank { state.sim1.carrierName },
-                            accent = nova.sim1,
-                            container = nova.sim1Container,
-                            ussdCode = sim1UssdInput,
-                            onUssdChange = { sim1UssdInput = it },
-                            onSaveUssd = { onSaveSimBalanceUssd(0, sim1UssdInput) },
-                            onCheckBalance = {
-                                onSaveSimBalanceUssd(0, sim1UssdInput)
-                                onCheckSimBalance(0)
-                            },
-                            isChecking = state.checkingBalanceSlot == 0,
-                            balanceResult = state.sim1BalanceText,
-                            isBn = isBn
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        SimBalanceRow(
-                            slotIndex = 1,
-                            simTitle = "SIM 2",
-                            carrierName = state.sim2.displayName.ifBlank { state.sim2.carrierName },
-                            accent = nova.sim2,
-                            container = nova.sim2Container,
-                            ussdCode = sim2UssdInput,
-                            onUssdChange = { sim2UssdInput = it },
-                            onSaveUssd = { onSaveSimBalanceUssd(1, sim2UssdInput) },
-                            onCheckBalance = {
-                                onSaveSimBalanceUssd(1, sim2UssdInput)
-                                onCheckSimBalance(1)
-                            },
-                            isChecking = state.checkingBalanceSlot == 1,
-                            balanceResult = state.sim2BalanceText,
-                            isBn = isBn
-                        )
-                    }
-                }
-
-                // 3. Unified Theme & Doodle Card (Black / White / Sapphire Ocean + All Doodles with Backgrounds)
-                item(key = "theme_and_doodle") {
-                    SettingsSectionCard(
-                        title = if (isBn) "থিম ও থিম ডুডল" else "Theme & Theme Doodle",
+                        title = if (isBn) "অ্যাপিয়ারেন্স ও থিম (Appearance)" else "Appearance & Themes",
                         icon = Icons.Filled.Palette,
                         iconTint = nova.gold
                     ) {
@@ -334,13 +319,81 @@ fun SettingsScreen(
                             language = state.preferences.language,
                             onSelectStyle = onSelectBackgroundDoodle
                         )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = nova.glassBorder.copy(alpha = 0.55f)
+                        )
+
+                        SettingsSwitchRow(
+                            title = if (isBn) "লিকুইড গ্লাস ইফেক্ট (Liquid Glass)" else "Liquid Glass Effect",
+                            subtitle = if (isBn) "কার্ড ও ন্যাভিগেশন বারে স্বচ্ছ কাঁচের ইফেক্ট" else "Translucent frosted glass surface cards & nav bar",
+                            checked = state.preferences.liquidGlassEnabled,
+                            onCheckedChange = onToggleLiquidGlass,
+                            tag = "switch_liquid_glass"
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isBn) "ফন্টের আকার (Font Size)" else "Font Size",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                AppFontScale.SMALL to (if (isBn) "ছোট" else "Small"),
+                                AppFontScale.MEDIUM to (if (isBn) "মাঝারি" else "Medium"),
+                                AppFontScale.LARGE to (if (isBn) "বড়" else "Large")
+                            ).forEach { (scale, label) ->
+                                FilterChip(
+                                    selected = state.preferences.fontScale == scale,
+                                    onClick = { onSelectFontScale(scale) },
+                                    label = { Text(label) }
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            color = nova.glassBorder.copy(alpha = 0.5f)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = strings.languageLabel,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FilterChip(
+                                    selected = state.preferences.language == AppLanguage.BENGALI,
+                                    onClick = { onToggleLanguage(AppLanguage.BENGALI) },
+                                    modifier = Modifier.testTag("lang_bn_chip"),
+                                    label = { Text("বাংলা") }
+                                )
+                                FilterChip(
+                                    selected = state.preferences.language == AppLanguage.ENGLISH,
+                                    onClick = { onToggleLanguage(AppLanguage.ENGLISH) },
+                                    modifier = Modifier.testTag("lang_en_chip"),
+                                    label = { Text("EN") }
+                                )
+                            }
+                        }
                     }
                 }
 
-                // 5. Call Ringtone & Dialpad Tone
-                item(key = "ringtone_and_dialpad_tone") {
+                // 2. CALLING PREFERENCES (Ringtone, Dialpad Tone, Quick Reply, DND Mode)
+                item(key = "calling_preferences") {
                     SettingsSectionCard(
-                        title = if (isBn) "কল টোন ও ডায়ালপ্যাড সাউন্ড" else "Call Ringtone & Dialpad Tone",
+                        title = if (isBn) "কলিং পছন্দ ও DND মোড" else "Calling Preferences & DND",
                         icon = Icons.Filled.MusicNote,
                         iconTint = nova.sim2
                     ) {
@@ -423,38 +476,29 @@ fun SettingsScreen(
                         )
 
                         if (state.preferences.dtmfSoundEnabled) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val soundStyles = listOf(
-                                KeypadSoundStyle.DTMF_CLASSIC to (if (isBn) "ক্লাসিক" else "Classic"),
-                                KeypadSoundStyle.STUDIO_CHIME to (if (isBn) "চাইম" else "Chime"),
-                                KeypadSoundStyle.SOFT_CLICK to (if (isBn) "সফট ক্লিক" else "Soft Click")
-                            )
+                            Spacer(modifier = Modifier.height(6.dp))
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                soundStyles.forEach { (style, label) ->
+                                listOf(
+                                    KeypadSoundStyle.DTMF_CLASSIC to (if (isBn) "ক্লাসিক" else "Classic"),
+                                    KeypadSoundStyle.STUDIO_CHIME to (if (isBn) "চাইম" else "Chime"),
+                                    KeypadSoundStyle.SOFT_CLICK to (if (isBn) "সফট ক্লিক" else "Soft Click")
+                                ).forEach { (style, label) ->
                                     FilterChip(
                                         selected = state.preferences.keypadSoundStyle == style,
                                         onClick = { onSelectSoundStyle(style) },
-                                        modifier = Modifier.testTag("sound_style_${style.name.lowercase()}"),
                                         label = { Text(label, style = MaterialTheme.typography.labelMedium) }
                                     )
                                 }
                             }
-
-                            Spacer(modifier = Modifier.height(6.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = null,
-                                    tint = nova.gold,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = nova.gold, modifier = Modifier.size(18.dp))
                                 Slider(
                                     value = state.preferences.keypadSoundVolume,
                                     onValueChange = onChangeSoundVolume,
@@ -474,41 +518,7 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                    }
-                }
 
-                // 6. Notifications & Vibration
-                item(key = "notifications_and_vibration") {
-                    SettingsSectionCard(
-                        title = if (isBn) "নোটিফিকেশন ও ভাইব্রেশন" else "Notifications & Vibration",
-                        icon = Icons.Filled.Notifications,
-                        iconTint = nova.gold
-                    ) {
-                        SettingsSwitchRow(
-                            title = if (isBn) "ইনকামিং কল নোটিফিকেশন" else "Incoming Call Alerts",
-                            subtitle = null,
-                            checked = state.preferences.notifyIncomingCalls,
-                            onCheckedChange = onToggleNotifyIncoming,
-                            tag = "switch_notify_incoming"
-                        )
-                        SettingsSwitchRow(
-                            title = if (isBn) "মিসড কল নোটিফিকেশন" else "Missed Call Alerts",
-                            subtitle = null,
-                            checked = state.preferences.notifyMissedCalls,
-                            onCheckedChange = onToggleNotifyMissed,
-                            tag = "switch_notify_missed"
-                        )
-                        SettingsSwitchRow(
-                            title = if (isBn) "চলমান কল নোটিফিকেশন" else "Ongoing Call Notification",
-                            subtitle = null,
-                            checked = state.preferences.notifyOngoingCalls,
-                            onCheckedChange = onToggleNotifyOngoing,
-                            tag = "switch_notify_ongoing"
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 6.dp),
-                            color = nova.glassBorder.copy(alpha = 0.45f)
-                        )
                         SettingsSwitchRow(
                             title = if (isBn) "কল এলে ভাইব্রেট" else "Vibrate on Ring",
                             subtitle = null,
@@ -518,32 +528,315 @@ fun SettingsScreen(
                         )
                         SettingsSwitchRow(
                             title = strings.hapticLabel,
-                            subtitle = if (isBn) "ডায়ালপ্যাডে বাটন চাপলে হালকা ভাইব্রেশন" else "Gentle vibration on dialpad taps",
+                            subtitle = if (isBn) "ডায়ালপ্যাড ট্যাপে হালকা ভাইব্রেশন" else "Gentle vibration on keypad taps",
                             checked = state.preferences.hapticEnabled,
                             onCheckedChange = onToggleHaptic,
                             tag = "switch_haptic"
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onOpenSystemNotificationSettings,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("open_notification_settings_button"),
-                            shape = RoundedCornerShape(12.dp)
+                        SettingsSwitchRow(
+                            title = if (isBn) "অটো স্পিকারফোন" else "Auto Speakerphone",
+                            subtitle = if (isBn) "কল রিসিভ হলে অটো স্পিকার অন করার চেষ্টা" else "Automatically switch audio to speaker on answer",
+                            checked = state.preferences.autoSpeakerOnCall,
+                            onCheckedChange = onToggleAutoSpeaker,
+                            tag = "switch_auto_speaker"
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isBn) "ইনকামিং কল স্টাইল ও স্লাইড অ্যান্সার" else "Incoming Call Display & Slide to Answer",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            FilterChip(
+                                selected = state.preferences.incomingCallDisplayStyle == IncomingCallDisplayStyle.FULL_SCREEN,
+                                onClick = { onSelectIncomingCallStyle(IncomingCallDisplayStyle.FULL_SCREEN) },
+                                label = { Text(if (isBn) "ফুল স্ক্রিন" else "Full Screen") }
+                            )
+                            FilterChip(
+                                selected = state.preferences.incomingCallDisplayStyle == IncomingCallDisplayStyle.BANNER,
+                                onClick = { onSelectIncomingCallStyle(IncomingCallDisplayStyle.BANNER) },
+                                label = { Text(if (isBn) "ব্যানার" else "Banner") }
+                            )
+                            FilterChip(
+                                selected = state.preferences.slideToAnswerMode == SlideToAnswerMode.LOCKED_ONLY,
+                                onClick = { onSelectSlideToAnswerMode(SlideToAnswerMode.LOCKED_ONLY) },
+                                label = { Text(if (isBn) "লক থাকলে স্লাইড" else "Slide Locked") }
+                            )
+                            FilterChip(
+                                selected = state.preferences.slideToAnswerMode == SlideToAnswerMode.ALWAYS,
+                                onClick = { onSelectSlideToAnswerMode(SlideToAnswerMode.ALWAYS) },
+                                label = { Text(if (isBn) "সবসময় স্লাইড" else "Always Slide") }
+                            )
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = nova.glassBorder.copy(alpha = 0.55f)
+                        )
+
+                        // Quick Reply SMS Editor
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null, tint = nova.gold, modifier = Modifier.size(18.dp))
                             Text(
-                                text = if (isBn) "সিস্টেম নোটিফিকেশন সেটিংস" else "System Notification Settings",
-                                style = MaterialTheme.typography.labelMedium
+                                text = if (isBn) "কুইক রিপ্লাই SMS টেমপ্লেট" else "Quick Reply SMS Templates",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            state.preferences.quickReplies.forEach { reply ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = reply,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(
+                                            onClick = { onRemoveQuickReply(reply) },
+                                            modifier = Modifier.size(30.dp)
+                                        ) {
+                                            Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete", tint = nova.missed, modifier = Modifier.size(17.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = quickReplyDraft,
+                                onValueChange = { quickReplyDraft = it },
+                                placeholder = { Text(if (isBn) "নতুন কুইক রিপ্লাই লিখুন..." else "Add quick reply...") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    if (quickReplyDraft.isNotBlank()) {
+                                        onAddQuickReply(quickReplyDraft)
+                                        quickReplyDraft = ""
+                                    }
+                                },
+                                enabled = quickReplyDraft.isNotBlank(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(if (isBn) "যোগ" else "Add")
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = nova.glassBorder.copy(alpha = 0.55f)
+                        )
+
+                        // DND Mode Quiet Hours
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Filled.DoNotDisturbOn, contentDescription = null, tint = nova.missed, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = if (isBn) "DND মোড (বিরক্তি কমানো)" else "DND Mode (Quiet Hours)",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        SettingsSwitchRow(
+                            title = if (isBn) "নির্দিষ্ট সময়ে অচেনা কল সাইলেন্ট রাখুন" else "Silence calls during DND schedule",
+                            subtitle = if (isBn) {
+                                "সময়: ${formatMinuteOfDay(state.preferences.dndStartMinutes)} – ${formatMinuteOfDay(state.preferences.dndEndMinutes)}"
+                            } else {
+                                "Window: ${formatMinuteOfDay(state.preferences.dndStartMinutes)} – ${formatMinuteOfDay(state.preferences.dndEndMinutes)}"
+                            },
+                            checked = state.preferences.dndEnabled,
+                            onCheckedChange = { enabled ->
+                                onUpdateDndConfig(
+                                    enabled,
+                                    state.preferences.dndStartMinutes,
+                                    state.preferences.dndEndMinutes,
+                                    state.preferences.dndAllowFavorites
+                                )
+                            },
+                            tag = "switch_dnd_mode"
+                        )
+                        if (state.preferences.dndEnabled) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val windows = listOf(
+                                    Triple(22 * 60, 6 * 60, if (isBn) "রাত ১০ – সকাল ৬" else "10 PM – 6 AM"),
+                                    Triple(23 * 60, 7 * 60, if (isBn) "রাত ১১ – সকাল ৭" else "11 PM – 7 AM"),
+                                    Triple(0, 8 * 60, if (isBn) "রাত ১২ – সকাল ৮" else "12 AM – 8 AM")
+                                )
+                                windows.forEach { (startMin, endMin, lbl) ->
+                                    FilterChip(
+                                        selected = state.preferences.dndStartMinutes == startMin && state.preferences.dndEndMinutes == endMin,
+                                        onClick = {
+                                            onUpdateDndConfig(true, startMin, endMin, state.preferences.dndAllowFavorites)
+                                        },
+                                        label = { Text(lbl, style = MaterialTheme.typography.labelSmall) }
+                                    )
+                                }
+                            }
+                            SettingsSwitchRow(
+                                title = if (isBn) "প্রিয়জনদের কল অনুমোদন দিন" else "Allow Favorites during DND",
+                                subtitle = null,
+                                checked = state.preferences.dndAllowFavorites,
+                                onCheckedChange = { allow ->
+                                    onUpdateDndConfig(true, state.preferences.dndStartMinutes, state.preferences.dndEndMinutes, allow)
+                                },
+                                tag = "switch_dnd_favorites"
                             )
                         }
                     }
                 }
 
-                // 7. Block List
-                item(key = "block_list") {
+                // 3. SIM & SIP SETTINGS (Dual SIM Manager + USSD Balance + System SIP Accounts; ICC Communication stays REMOVED!)
+                item(key = "sim_and_sip") {
                     SettingsSectionCard(
-                        title = "${strings.blockedListTitle} (${state.blockedNumbers.size})",
-                        icon = Icons.Filled.Block,
+                        title = if (isBn) "SIM ও SIP সেটিংস (Dual SIM Manager)" else "SIM & SIP Settings",
+                        icon = Icons.Filled.SimCard,
+                        iconTint = nova.sim1
+                    ) {
+                        Text(
+                            text = if (isBn) "ডিফল্ট কলিং লাইন নির্বাচন" else "Default Calling Line",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                DefaultRoutePreference.ASK to (if (isBn) "প্রতিবার জিজ্ঞাসা" else "Ask Always"),
+                                DefaultRoutePreference.SIM_1 to "SIM 1",
+                                DefaultRoutePreference.SIM_2 to "SIM 2"
+                            ).forEach { (pref, label) ->
+                                FilterChip(
+                                    selected = state.preferences.defaultRoute == pref,
+                                    onClick = { onSelectDefaultRoute(pref) },
+                                    label = { Text(label) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = sim1AliasInput,
+                                onValueChange = { sim1AliasInput = it },
+                                label = { Text(if (isBn) "SIM 1 নাম" else "SIM 1 Label") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = sim2AliasInput,
+                                onValueChange = { sim2AliasInput = it },
+                                label = { Text(if (isBn) "SIM 2 নাম" else "SIM 2 Label") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    onSaveSimAlias(0, sim1AliasInput)
+                                    onSaveSimAlias(1, sim2AliasInput)
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp)
+                            ) {
+                                Text(if (isBn) "সেভ" else "Save")
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = nova.glassBorder.copy(alpha = 0.55f)
+                        )
+
+                        SimBalanceRow(
+                            slotIndex = 0,
+                            simTitle = "SIM 1",
+                            carrierName = state.sim1.displayName.ifBlank { state.sim1.carrierName },
+                            accent = nova.sim1,
+                            container = nova.sim1Container,
+                            ussdCode = sim1UssdInput,
+                            onUssdChange = { sim1UssdInput = it },
+                            onSaveUssd = { onSaveSimBalanceUssd(0, sim1UssdInput) },
+                            onCheckBalance = {
+                                onSaveSimBalanceUssd(0, sim1UssdInput)
+                                onCheckSimBalance(0)
+                            },
+                            isChecking = state.checkingBalanceSlot == 0,
+                            balanceResult = state.sim1BalanceText,
+                            isBn = isBn
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        SimBalanceRow(
+                            slotIndex = 1,
+                            simTitle = "SIM 2",
+                            carrierName = state.sim2.displayName.ifBlank { state.sim2.carrierName },
+                            accent = nova.sim2,
+                            container = nova.sim2Container,
+                            ussdCode = sim2UssdInput,
+                            onUssdChange = { sim2UssdInput = it },
+                            onSaveUssd = { onSaveSimBalanceUssd(1, sim2UssdInput) },
+                            onCheckBalance = {
+                                onSaveSimBalanceUssd(1, sim2UssdInput)
+                                onCheckSimBalance(1)
+                            },
+                            isChecking = state.checkingBalanceSlot == 1,
+                            balanceResult = state.sim2BalanceText,
+                            isBn = isBn
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedButton(
+                            onClick = onOpenSipCallingAccounts,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Filled.SettingsPhone, contentDescription = null, modifier = Modifier.size(17.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (isBn) "সিস্টেম SIP ও কলিং অ্যাকাউন্টস" else "System SIP & Calling Accounts")
+                        }
+                    }
+                }
+
+                // 4. SPAM & BLOCK LIST (Live Caller ID + Spam Protection + Number Lookup + Blocked Numbers)
+                item(key = "spam_and_block_list") {
+                    val callerIdOn = state.cloudCallerId.profile?.callerIdEnabled ?: true
+                    SettingsSectionCard(
+                        title = if (isBn) "স্প্যাম ও ব্লক লিস্ট (${state.blockedNumbers.size})" else "Spam & Block List (${state.blockedNumbers.size})",
+                        icon = Icons.Filled.Shield,
                         iconTint = nova.missed,
                         trailing = {
                             OutlinedButton(
@@ -559,6 +852,20 @@ fun SettingsScreen(
                         }
                     ) {
                         SettingsSwitchRow(
+                            title = if (isBn) "লাইভ কলার আইডি (Live Caller ID)" else "Live Smart Caller ID",
+                            subtitle = if (isBn) "অচেনা নম্বর থেকে কল এলে নাম ও পরিচয় দেখাবে" else "Identify unknown callers & businesses automatically",
+                            checked = callerIdOn,
+                            onCheckedChange = onToggleCloudCallerId,
+                            tag = "switch_live_caller_id"
+                        )
+                        SettingsSwitchRow(
+                            title = if (isBn) "স্প্যাম কল প্রোটেকশন" else "Smart Spam Call Protection",
+                            subtitle = if (isBn) "প্রতারণা বা বেশি রিপোর্ট হওয়া স্প্যাম কল অটো-ব্লক করবে" else "Automatically screen known scam & high-report spam callers",
+                            checked = state.preferences.spamProtectionEnabled,
+                            onCheckedChange = onToggleSpamProtection,
+                            tag = "switch_spam_protection"
+                        )
+                        SettingsSwitchRow(
                             title = if (isBn) "ব্লকড কল অটো-রিজেক্ট" else "Auto-Reject Blocked Calls",
                             subtitle = if (isBn) "ব্লক করা নম্বর থেকে কল এলে সাথে সাথে কেটে দেবে" else "Automatically reject incoming calls from blocked numbers",
                             checked = state.preferences.autoRejectBlocked,
@@ -567,6 +874,45 @@ fun SettingsScreen(
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onOpenNumberSearchDashboard,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isBn) "নম্বর সার্চ" else "Number Search", style = MaterialTheme.typography.labelMedium)
+                            }
+                            OutlinedButton(
+                                onClick = onOpenReportSpamDialog,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.VerifiedUser, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isBn) "ট্যাগ / স্প্যাম রিপোর্ট" else "Tag / Report Spam", style = MaterialTheme.typography.labelMedium)
+                            }
+                            OutlinedButton(
+                                onClick = onSyncCommunityContacts,
+                                enabled = !state.cloudCallerId.isSyncingContacts,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (state.cloudCallerId.isSyncingContacts) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isBn) "কমিউনিটি সিঙ্ক" else "Community Sync", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            color = nova.glassBorder.copy(alpha = 0.45f)
+                        )
 
                         if (state.blockedNumbers.isEmpty()) {
                             Text(
@@ -619,52 +965,229 @@ fun SettingsScreen(
                     }
                 }
 
-                // 8. Language
-                item(key = "language") {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(22.dp),
-                        color = nova.glassSurface,
-                        border = BorderStroke(1.dp, nova.glassBorder.copy(alpha = 0.75f))
+                // 5. BACKUP & RESTORE
+                item(key = "backup_and_restore") {
+                    val lastBackupText = if (state.preferences.lastBackupTimestamp > 0L) {
+                        val t = dateFmt.format(Date(state.preferences.lastBackupTimestamp))
+                        if (isBn) "সর্বশেষ ব্যাকআপ: $t" else "Last backup: $t"
+                    } else {
+                        if (isBn) "এখনো কোনো ব্যাকআপ তৈরি হয়নি" else "No backup snapshot created yet"
+                    }
+
+                    SettingsSectionCard(
+                        title = if (isBn) "ব্যাকআপ ও রিস্টোর (Backup & Restore)" else "Backup & Restore",
+                        icon = Icons.Filled.Backup,
+                        iconTint = nova.sim1
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        SettingsSwitchRow(
+                            title = if (isBn) "অটো কল ব্যাকআপ" else "Auto Call Backup",
+                            subtitle = lastBackupText,
+                            checked = state.preferences.autoCallBackupEnabled,
+                            onCheckedChange = onToggleAutoCallBackup,
+                            tag = "switch_auto_call_backup"
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = onExportBackup,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("export_backup_button"),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Filled.Language, contentDescription = null, tint = nova.gold, modifier = Modifier.size(20.dp))
-                                Text(
-                                    text = strings.languageLabel,
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isBn) "ব্যাকআপ সেভ" else "Export JSON", style = MaterialTheme.typography.labelMedium)
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                FilterChip(
-                                    selected = state.preferences.language == AppLanguage.BENGALI,
-                                    onClick = { onToggleLanguage(AppLanguage.BENGALI) },
-                                    modifier = Modifier.testTag("lang_bn_chip"),
-                                    label = { Text("বাংলা") }
-                                )
-                                FilterChip(
-                                    selected = state.preferences.language == AppLanguage.ENGLISH,
-                                    onClick = { onToggleLanguage(AppLanguage.ENGLISH) },
-                                    modifier = Modifier.testTag("lang_en_chip"),
-                                    label = { Text("EN") }
-                                )
+                            OutlinedButton(
+                                onClick = onImportBackup,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("import_backup_button"),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isBn) "রিস্টোর করুন" else "Restore", style = MaterialTheme.typography.labelMedium)
                             }
                         }
+                    }
+                }
+
+                // 6. PRIVACY & SECURITY
+                item(key = "privacy_and_security") {
+                    SettingsSectionCard(
+                        title = if (isBn) "প্রাইভেসি ও সিকিউরিটি" else "Privacy & Security",
+                        icon = Icons.Filled.Security,
+                        iconTint = nova.gold
+                    ) {
+                        SettingsSwitchRow(
+                            title = if (isBn) "ইনকামিং কল নোটিফিকেশন" else "Incoming Call Alerts",
+                            subtitle = null,
+                            checked = state.preferences.notifyIncomingCalls,
+                            onCheckedChange = onToggleNotifyIncoming,
+                            tag = "switch_notify_incoming"
+                        )
+                        SettingsSwitchRow(
+                            title = if (isBn) "মিসড কল নোটিফিকেশন" else "Missed Call Alerts",
+                            subtitle = null,
+                            checked = state.preferences.notifyMissedCalls,
+                            onCheckedChange = onToggleNotifyMissed,
+                            tag = "switch_notify_missed"
+                        )
+                        SettingsSwitchRow(
+                            title = if (isBn) "চলমান কল নোটিফিকেশন" else "Ongoing Call Notification",
+                            subtitle = null,
+                            checked = state.preferences.notifyOngoingCalls,
+                            onCheckedChange = onToggleNotifyOngoing,
+                            tag = "switch_notify_ongoing"
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = onOpenSystemNotificationSettings,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(if (isBn) "নোটিফিকেশন সেটিংস" else "Notification Settings", style = MaterialTheme.typography.labelSmall)
+                            }
+                            OutlinedButton(
+                                onClick = onOpenAppInfoSettings,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(if (isBn) "অ্যাপ পারমিশন" else "Permissions", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            color = nova.glassBorder.copy(alpha = 0.45f)
+                        )
+
+                        OutlinedButton(
+                            onClick = { showClearDataConfirm = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, nova.missed.copy(alpha = 0.55f))
+                        ) {
+                            Icon(Icons.Filled.DeleteForever, contentDescription = null, tint = nova.missed, modifier = Modifier.size(17.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isBn) "লোকাল কল নোট ও ডাটা মুছুন" else "Clear Local Notes & App Data",
+                                color = nova.missed,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+
+                        if (!signedInEmail.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isBn) "গুগল অ্যাকাউন্ট" else "Signed-in Account",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = signedInEmail,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    TextButton(onClick = onSignOut) {
+                                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = nova.missed, modifier = Modifier.size(17.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(if (isBn) "লগ আউট" else "Sign Out", color = nova.missed)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 7. ABOUT PRO DIALER
+                item(key = "about_pro_dialer") {
+                    SettingsSectionCard(
+                        title = if (isBn) "PRO DIALER সম্পর্কে (About)" else "About PRO DIALER",
+                        icon = Icons.Filled.Info,
+                        iconTint = nova.sim2
+                    ) {
+                        Text(
+                            text = "Shajamal • PRO DIALER v2.0",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (isBn) {
+                                "ডুয়াল সিম স্মার্ট ডায়ালার, লাইভ কলার আইডি, স্প্যাম কল প্রোটেকশন, কল অ্যানালিটিক্স ড্যাশবোর্ড, কন্টাক্ট প্রোফাইল, কল রিমাইন্ডার, নম্বর নোটস, কুইক রিপ্লাই, DND মোড এবং অটো কল ব্যাকআপ।"
+                            } else {
+                                "Liquid Glass Dual SIM Dialer with Live Caller ID, Spam Call Protection, Call Analytics Dashboard, Full-Screen Contact Profile, Call Reminders, Number Notes, Quick Reply, DND Mode & Auto Call Backup."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         }
     }
+
+    if (showClearDataConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearDataConfirm = false },
+            title = { Text(if (isBn) "লোকাল ডাটা মুছবেন?" else "Clear Local Data?") },
+            text = {
+                Text(
+                    if (isBn) "আপনার সব কল নোট, ব্লক লিস্ট ও স্পিড ডায়াল ডাটা মুছে যাবে। (ব্যাকআপ থাকলে পরে রিস্টোর করতে পারবেন)"
+                    else "This clears your local call notes, blocked list, and speed dials. Exported backups can still restore them."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearDataConfirm = false
+                        onClearLocalUserData()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = nova.missed, contentColor = Color.White)
+                ) {
+                    Text(if (isBn) "মুছে ফেলুন" else "Clear")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDataConfirm = false }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
+    }
+}
+
+private fun formatMinuteOfDay(totalMinutes: Int): String {
+    val h24 = (totalMinutes / 60).coerceIn(0, 23)
+    val m = (totalMinutes % 60).coerceIn(0, 59)
+    val amPm = if (h24 < 12) "AM" else "PM"
+    val h12 = when {
+        h24 == 0 -> 12
+        h24 > 12 -> h24 - 12
+        else -> h24
+    }
+    return String.format(Locale.getDefault(), "%d:%02d %s", h12, m, amPm)
 }
 
 @Composable

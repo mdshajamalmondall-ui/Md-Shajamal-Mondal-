@@ -89,6 +89,8 @@ import com.example.ui.components.SaveContactBottomSheet
 import com.example.ui.components.SpeedDialAssignDialog
 import com.example.ui.components.TagCallerDialog
 import com.example.ui.i18n.novaStrings
+import com.example.ui.screens.CallDashboardScreen
+import com.example.ui.screens.ContactProfileScreen
 import com.example.ui.screens.ContactsScreen
 import com.example.ui.screens.FavoritesScreen
 import com.example.ui.screens.KeypadScreen
@@ -252,6 +254,22 @@ fun NovaCallApp(
         }
     }
 
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            viewModel.exportBackupToUri(uri)
+        }
+    }
+
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importBackupFromUri(uri)
+        }
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -271,11 +289,13 @@ fun NovaCallApp(
         }
     }
 
-    BackHandler(enabled = state.isSettingsOpen || state.activeTab != NovaTab.RECENTS) {
-        if (state.isSettingsOpen) {
-            viewModel.closeSettings()
-        } else {
-            viewModel.selectTab(NovaTab.RECENTS)
+    val hasOverlayScreen = state.selectedContactProfile != null || state.isDashboardOpen || state.isSettingsOpen
+    BackHandler(enabled = hasOverlayScreen || state.activeTab != NovaTab.RECENTS) {
+        when {
+            state.selectedContactProfile != null -> viewModel.closeContactProfile()
+            state.isDashboardOpen -> viewModel.closeDashboard()
+            state.isSettingsOpen -> viewModel.closeSettings()
+            else -> viewModel.selectTab(NovaTab.RECENTS)
         }
     }
 
@@ -324,7 +344,7 @@ fun NovaCallApp(
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val useRail = maxWidth >= 600.dp
-            val showFloatingPill = !useRail && !state.isSettingsOpen
+            val showFloatingPill = !useRail && !hasOverlayScreen
 
             Box(
                 modifier = Modifier
@@ -354,7 +374,7 @@ fun NovaCallApp(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(innerPadding)
-                            .let { mod -> if (state.isSettingsOpen) mod.navigationBarsPadding() else mod }
+                            .let { mod -> if (hasOverlayScreen) mod.navigationBarsPadding() else mod }
                     ) {
                         // Tap-to-return Active Call banner when user is on a live call inside Shajamal
                         activeCall?.let { live ->
@@ -384,7 +404,7 @@ fun NovaCallApp(
                         }
 
                         Row(modifier = Modifier.weight(1f)) {
-                            if (useRail && !state.isSettingsOpen) {
+                            if (useRail && !hasOverlayScreen) {
                                 NavigationRail(
                                     containerColor = MaterialTheme.colorScheme.surface
                                 ) {
@@ -417,46 +437,142 @@ fun NovaCallApp(
                             }
 
                             Box(modifier = Modifier.weight(1f)) {
-                                if (state.isSettingsOpen) {
-                                    SettingsScreen(
+                                val profileTarget = state.selectedContactProfile
+                                when {
+                                    profileTarget != null -> ContactProfileScreen(
+                                        target = profileTarget,
                                         state = state,
                                         strings = strings,
+                                        onBack = viewModel::closeContactProfile,
+                                        onCallRoute = viewModel::placeCall,
+                                        onWhatsApp = viewModel::openWhatsApp,
+                                        onQuickSms = viewModel::openSms,
+                                        onCopyNumber = viewModel::copyNumber,
+                                        onSaveContact = { num, name ->
+                                            saveContactRequest = SaveContactDialogRequest(num, name)
+                                        },
+                                        onToggleFavorite = viewModel::toggleFavoriteByNumber,
+                                        onAssignFavoriteGroup = viewModel::assignFavoriteGroup,
+                                        onSaveNote = viewModel::saveCallNote,
+                                        onScheduleReminder = viewModel::scheduleCallReminder,
+                                        onClearReminder = viewModel::clearCallReminder,
+                                        onOpenTagCaller = { num, existingName ->
+                                            tagCallerRequest = TagCallerDialogRequest(
+                                                number = num,
+                                                name = existingName.orEmpty(),
+                                                category = state.profileLookupResult?.category ?: CallerCategory.PERSONAL
+                                            )
+                                        },
+                                        onReportSpam = viewModel::reportSpamNumber,
+                                        onToggleBlock = { currentlyBlocked ->
+                                            if (currentlyBlocked) {
+                                                viewModel.unblockNumber(profileTarget.normalizedNumber)
+                                            } else {
+                                                blockDialogRequest = BlockDialogRequest(
+                                                    number = profileTarget.number,
+                                                    label = profileTarget.name.orEmpty()
+                                                )
+                                            }
+                                        },
+                                        onOpenSpeedDial = { num, name ->
+                                            val usedDigits = state.speedDials.map { it.digit }.toSet()
+                                            val nextFree = (2..9).firstOrNull { it !in usedDigits } ?: 2
+                                            speedDialDialogRequest = SpeedDialDialogRequest(
+                                                digit = nextFree,
+                                                existing = state.speedDials.firstOrNull { it.digit == nextFree },
+                                                initialNumber = num,
+                                                initialName = name
+                                            )
+                                        },
+                                        onDeleteSingleHistoryEntry = viewModel::deleteSingleCallLogEntry
+                                    )
+
+                                    state.isDashboardOpen -> CallDashboardScreen(
+                                        state = state,
+                                        onBack = viewModel::closeDashboard,
+                                        onSelectPeriod = viewModel::selectAnalyticsPeriod,
+                                        onSearchNumberChange = viewModel::searchNumberDirectory,
+                                        onOpenProfile = viewModel::openContactProfile,
+                                        onCallRoute = viewModel::placeCall,
+                                        onOpenTagCaller = { num, existingName ->
+                                            tagCallerRequest = TagCallerDialogRequest(
+                                                number = num,
+                                                name = existingName.orEmpty(),
+                                                category = state.numberSearchResult?.category ?: CallerCategory.PERSONAL
+                                            )
+                                        },
+                                        onReportSpam = viewModel::reportSpamNumber
+                                    )
+
+                                    state.isSettingsOpen -> SettingsScreen(
+                                        state = state,
+                                        strings = strings,
+                                        signedInEmail = signedInEmail,
                                         onBack = viewModel::closeSettings,
                                         onRequestDefaultDialer = requestDefaultDialer,
                                         onOpenAppInfoSettings = viewModel::openAppInfoSettings,
                                         onOpenSystemDefaultApps = viewModel::openSystemDefaultAppsSettings,
-                                        onCheckSimBalance = viewModel::checkSimBalance,
-                                        onSaveSimBalanceUssd = viewModel::updateSimBalanceUssd,
-                                        defaultUssdForSlot = viewModel::defaultBalanceUssdForSlot,
                                         onSelectThemePalette = viewModel::updateThemePalette,
                                         onSelectBackgroundDoodle = viewModel::updateBackgroundDoodle,
+                                        onToggleLiquidGlass = viewModel::updateLiquidGlass,
+                                        onSelectFontScale = viewModel::updateFontScale,
+                                        onToggleLanguage = viewModel::updateLanguage,
                                         onPickRingtone = launchRingtonePicker,
                                         onOpenSystemSoundSettings = viewModel::openSystemSoundSettings,
                                         onToggleDtmfSound = viewModel::updateDtmfSound,
                                         onSelectSoundStyle = viewModel::updateKeypadSoundStyle,
                                         onChangeSoundVolume = viewModel::updateKeypadSoundVolume,
                                         onPreviewSound = { viewModel.previewKeypadSound() },
+                                        onToggleVibrateOnRing = viewModel::updateVibrateOnRing,
+                                        onToggleHaptic = viewModel::updateHaptic,
+                                        onToggleAutoSpeaker = viewModel::updateAutoSpeaker,
+                                        onSelectIncomingCallStyle = viewModel::updateIncomingCallDisplayStyle,
+                                        onSelectSlideToAnswerMode = viewModel::updateSlideToAnswerMode,
+                                        onAddQuickReply = viewModel::addQuickReply,
+                                        onRemoveQuickReply = viewModel::removeQuickReply,
+                                        onUpdateDndConfig = viewModel::updateDndConfig,
+                                        onSelectDefaultRoute = viewModel::updateDefaultRoute,
+                                        onSaveSimAlias = viewModel::updateSimAlias,
+                                        onCheckSimBalance = viewModel::checkSimBalance,
+                                        onSaveSimBalanceUssd = viewModel::updateSimBalanceUssd,
+                                        defaultUssdForSlot = viewModel::defaultBalanceUssdForSlot,
+                                        onOpenSipCallingAccounts = viewModel::openSipCallingAccountsSettings,
+                                        onToggleCloudCallerId = viewModel::toggleCloudCallerIdEnabled,
+                                        onToggleSpamProtection = viewModel::updateSpamProtection,
+                                        onSyncCommunityContacts = viewModel::syncContactsToCommunityCallerId,
+                                        onOpenNumberSearchDashboard = viewModel::openDashboard,
+                                        onOpenReportSpamDialog = {
+                                            tagCallerRequest = TagCallerDialogRequest("", "", CallerCategory.SPAM)
+                                        },
+                                        onToggleAutoRejectBlocked = viewModel::updateAutoRejectBlocked,
+                                        onOpenAddBlockDialog = { blockDialogRequest = BlockDialogRequest("", "") },
+                                        onUnblockNumber = viewModel::unblockNumber,
+                                        onToggleAutoCallBackup = viewModel::updateAutoCallBackup,
+                                        onExportBackup = {
+                                            exportBackupLauncher.launch("shajamal_call_backup.json")
+                                        },
+                                        onImportBackup = {
+                                            importBackupLauncher.launch(arrayOf("application/json", "*/*"))
+                                        },
                                         onOpenSystemNotificationSettings = viewModel::openAppNotificationSettings,
                                         onToggleNotifyIncoming = viewModel::updateNotifyIncoming,
                                         onToggleNotifyMissed = viewModel::updateNotifyMissed,
                                         onToggleNotifyOngoing = viewModel::updateNotifyOngoing,
-                                        onToggleVibrateOnRing = viewModel::updateVibrateOnRing,
-                                        onToggleHaptic = viewModel::updateHaptic,
-                                        onToggleAutoRejectBlocked = viewModel::updateAutoRejectBlocked,
-                                        onOpenAddBlockDialog = { blockDialogRequest = BlockDialogRequest("", "") },
-                                        onUnblockNumber = viewModel::unblockNumber,
-                                        onToggleLanguage = viewModel::updateLanguage
+                                        onClearLocalUserData = viewModel::clearLocalUserData,
+                                        onSignOut = onSignOut
                                     )
-                                } else {
-                                    when (state.activeTab) {
+
+                                    else -> when (state.activeTab) {
                                         NovaTab.FAVORITES -> FavoritesScreen(
                                             state = state,
                                             strings = strings,
                                             onCallRoute = viewModel::placeCall,
-                                            onOpenCallerDetail = viewModel::openCallerDetail,
+                                            onOpenContactProfile = viewModel::openContactProfile,
                                             onLongPressChooseLine = viewModel::openRoutePicker,
                                             onAddFavorite = viewModel::addFavorite,
-                                            onRemoveFavorite = viewModel::removeFavorite
+                                            onRemoveFavorite = viewModel::removeFavorite,
+                                            onSelectGroup = viewModel::selectFavoriteGroup,
+                                            onAssignGroup = viewModel::assignFavoriteGroup
                                         )
 
                                         NovaTab.RECENTS -> RecentsScreen(
@@ -466,6 +582,7 @@ fun NovaCallApp(
                                             onSearchChange = viewModel::updateRecentsSearch,
                                             onRefresh = { viewModel.refreshSystemData(force = true) },
                                             onOpenSettings = viewModel::openSettings,
+                                            onOpenDashboard = viewModel::openDashboard,
                                             onRequestPermissions = requestAllPermissions,
                                             onCallRoute = viewModel::placeCall,
                                             onRequestCallWith = viewModel::openRoutePicker,
@@ -478,12 +595,15 @@ fun NovaCallApp(
                                                     blockDialogRequest = BlockDialogRequest(num, name.orEmpty())
                                                 }
                                             },
-                                            onOpenCallerDetail = viewModel::openCallerDetail,
+                                            onOpenCallerDetail = viewModel::openContactProfile,
                                             onOpenTagCaller = { num, existingName ->
                                                 tagCallerRequest = TagCallerDialogRequest(
                                                     number = num,
                                                     name = existingName.orEmpty()
                                                 )
+                                            },
+                                            onReportSpam = { num, existingName ->
+                                                viewModel.reportSpamNumber(num, existingName.orEmpty(), alsoBlock = true)
                                             },
                                             onWhatsApp = viewModel::openWhatsApp,
                                             onOpenNoteDialog = { num, name ->
@@ -511,7 +631,7 @@ fun NovaCallApp(
                                                 saveContactRequest = SaveContactDialogRequest("", "")
                                             },
                                             onCallRoute = viewModel::placeCall,
-                                            onOpenCallerDetail = viewModel::openCallerDetail,
+                                            onOpenCallerDetail = viewModel::openContactProfile,
                                             onEditSpeedDialSlot = { digit, existing ->
                                                 speedDialDialogRequest = SpeedDialDialogRequest(
                                                     digit = digit,
@@ -653,7 +773,10 @@ fun NovaCallApp(
                             )
                         }
                     },
-                    onDeleteSingleEntry = viewModel::deleteSingleCallLogEntry
+                    onDeleteSingleEntry = viewModel::deleteSingleCallLogEntry,
+                    onOpenFullProfile = {
+                        viewModel.openContactProfile(target.number, target.name)
+                    }
                 )
             }
 

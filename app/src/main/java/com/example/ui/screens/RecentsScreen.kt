@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
@@ -40,12 +41,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SimCard
@@ -106,6 +108,7 @@ fun RecentsScreen(
     onSearchChange: (String) -> Unit,
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDashboard: () -> Unit,
     onRequestPermissions: () -> Unit,
     onCallRoute: (String, CallRoute, String?) -> Unit,
     onRequestCallWith: (String, String?) -> Unit,
@@ -114,6 +117,7 @@ fun RecentsScreen(
     onToggleBlockNumber: (String, String?, Boolean) -> Unit,
     onOpenCallerDetail: (String, String?) -> Unit,
     onOpenTagCaller: (String, String?) -> Unit,
+    onReportSpam: (String, String?) -> Unit,
     onWhatsApp: (String) -> Unit,
     onOpenNoteDialog: (String, String?) -> Unit,
     onDeleteCallLog: (CallLogItem) -> Unit,
@@ -310,6 +314,26 @@ fun RecentsScreen(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
+                            .clickable(onClick = onOpenDashboard)
+                            .testTag("recents_dashboard_button"),
+                        shape = CircleShape,
+                        color = nova.glassSurface,
+                        border = BorderStroke(1.dp, nova.glassBorder.copy(alpha = 0.75f))
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Analytics,
+                                contentDescription = if (isBn) "কল ড্যাশবোর্ড" else "Call Dashboard",
+                                tint = nova.sim1,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
                             .clickable(onClick = onOpenSettings)
                             .testTag("recents_settings_button"),
                         shape = CircleShape,
@@ -428,11 +452,13 @@ fun RecentsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Truecaller-style Caller ID Status Strip + Gesture Tip
+            // Truecaller-style Caller ID Status Strip (Tap to open Call Dashboard & Number Search)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onOpenDashboard)
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -447,8 +473,8 @@ fun RecentsScreen(
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
-                        text = if (isBn) "Truecaller আইডি সক্রিয় • আজকের কল: ${state.todayCallCount}"
-                        else "Caller ID Active • Today: ${state.todayCallCount}",
+                        text = if (isBn) "Smart Caller ID ও রিপোর্ট • আজ: ${state.todayCallCount}"
+                        else "Smart Caller ID & Reports • Today: ${state.todayCallCount}",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -612,6 +638,9 @@ fun RecentsScreen(
                                 strings = strings,
                                 language = state.preferences.language,
                                 onOpenCallHistory = { onOpenCallHistory(item.number, item.contactName) },
+                                onOpenProfile = { onOpenCallerDetail(item.number, item.contactName) },
+                                onOpenTagCaller = { onOpenTagCaller(item.number, item.contactName) },
+                                onReportSpam = { onReportSpam(item.number, item.contactName) },
                                 onEditInKeypad = { onEditInKeypad(item.number) },
                                 onToggleBlock = { onToggleBlockNumber(item.number, item.contactName, isBlocked) },
                                 onDeleteClick = { onDeleteCallLog(item) },
@@ -645,6 +674,9 @@ private fun CallLogCard(
     strings: NovaStrings,
     language: AppLanguage,
     onOpenCallHistory: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenTagCaller: () -> Unit,
+    onReportSpam: () -> Unit,
     onEditInKeypad: () -> Unit,
     onToggleBlock: () -> Unit,
     onDeleteClick: () -> Unit,
@@ -694,10 +726,10 @@ private fun CallLogCard(
                         modifier = Modifier.size(34.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.RemoveCircle,
+                            imageVector = Icons.Filled.Delete,
                             contentDescription = strings.delete,
                             tint = nova.missed,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(21.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
@@ -878,6 +910,26 @@ private fun CallLogCard(
                             DropdownMenuItem(
                                 text = {
                                     Text(
+                                        text = if (isBn) "কন্টাক্ট প্রোফাইল" else "Contact Profile",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Person,
+                                        contentDescription = null,
+                                        tint = nova.sim1,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenProfile()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
                                         text = if (isBn) "কল হিস্ট্রি" else "Call history",
                                         style = MaterialTheme.typography.bodyMedium
                                     )
@@ -897,6 +949,26 @@ private fun CallLogCard(
                             DropdownMenuItem(
                                 text = {
                                     Text(
+                                        text = if (isBn) "নাম / বিজনেস ট্যাগ" else "Tag Caller ID",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.VerifiedUser,
+                                        contentDescription = null,
+                                        tint = Color(0xFF0087FF),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenTagCaller()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
                                         text = if (isBn) "কি-প্যাডে এডিট" else "Edit in keypad",
                                         style = MaterialTheme.typography.bodyMedium
                                     )
@@ -911,6 +983,27 @@ private fun CallLogCard(
                                 onClick = {
                                     menuExpanded = false
                                     onEditInKeypad()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isBn) "স্প্যাম রিপোর্ট" else "Report Spam",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = nova.missed
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Flag,
+                                        contentDescription = null,
+                                        tint = nova.missed,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onReportSpam()
                                 }
                             )
                             DropdownMenuItem(

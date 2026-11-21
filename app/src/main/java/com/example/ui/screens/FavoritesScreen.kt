@@ -56,10 +56,15 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.unit.dp
 import com.example.data.model.AppLanguage
 import com.example.data.model.CallRoute
 import com.example.data.model.DeviceContact
+import com.example.data.model.FavoriteGroup
 import com.example.data.model.formatDisplayNumber
 import com.example.ui.components.ContactAvatar
 import com.example.ui.i18n.NovaStrings
@@ -72,10 +77,12 @@ fun FavoritesScreen(
     state: DialerUiState,
     strings: NovaStrings,
     onCallRoute: (String, CallRoute, String?) -> Unit,
-    onOpenCallerDetail: (String, String?) -> Unit,
+    onOpenContactProfile: (String, String?) -> Unit,
     onLongPressChooseLine: (String, String?) -> Unit,
     onAddFavorite: (DeviceContact) -> Unit,
     onRemoveFavorite: (DeviceContact) -> Unit,
+    onSelectGroup: (FavoriteGroup) -> Unit,
+    onAssignGroup: (String, FavoriteGroup) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val nova = LocalNovaColors.current
@@ -152,9 +159,60 @@ fun FavoritesScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            if (state.favoriteContacts.isEmpty()) {
+            // Favorite Groups Filter Strip: All | Family | Friends | Office
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(FavoriteGroup.entries, key = { it.name }) { grp ->
+                    val active = state.selectedFavoriteGroup == grp
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onSelectGroup(grp) }
+                            .testTag("fav_group_${grp.name.lowercase()}"),
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (active) nova.goldContainer else nova.glassSurface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (active) nova.gold else nova.glassBorder.copy(alpha = 0.7f)
+                        )
+                    ) {
+                        Text(
+                            text = if (isBn) grp.labelBn else grp.labelEn,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                            ),
+                            color = if (active) nova.gold else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val displayedFavorites = remember(
+                state.favoriteContacts,
+                state.selectedFavoriteGroup,
+                state.preferences.favoriteGroups
+            ) {
+                if (state.selectedFavoriteGroup == FavoriteGroup.ALL) {
+                    state.favoriteContacts
+                } else {
+                    state.favoriteContacts.filter { c ->
+                        val tail = c.normalizedNumber.takeLast(10)
+                        val assigned = state.preferences.favoriteGroups.entries.firstOrNull { (k, _) ->
+                            k == c.normalizedNumber || (tail.length >= 8 && k.endsWith(tail))
+                        }?.value
+                        assigned == state.selectedFavoriteGroup
+                    }
+                }
+            }
+
+            if (displayedFavorites.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -181,14 +239,19 @@ fun FavoritesScreen(
                         }
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = if (isBn) "আপনার প্রিয় মানুষেরা সবসময় সামনে" else "Your people, always first.",
+                            text = if (state.selectedFavoriteGroup == FavoriteGroup.ALL) {
+                                if (isBn) "আপনার প্রিয় মানুষেরা সবসময় সামনে" else "Your people, always first."
+                            } else {
+                                val grpName = if (isBn) state.selectedFavoriteGroup.labelBn else state.selectedFavoriteGroup.labelEn
+                                if (isBn) "$grpName গ্রুপে এখনো কেউ নেই" else "No favorites in $grpName yet"
+                            },
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (isBn) "উপরের (+) বাটনে ট্যাপ করে প্রিয় কন্টাক্ট যোগ করুন—এক ট্যাপেই কল করতে পারবেন।"
-                            else "Tap (+) above to pin favorite contacts for instant one-tap calling.",
+                            text = if (isBn) "উপরের (+) বাটনে ট্যাপ করে প্রিয় কন্টাক্ট যোগ করুন—অথবা প্রোফাইল থেকে গ্রুপ সেট করুন।"
+                            else "Tap (+) above to pin favorite contacts or assign groups from Contact Profile.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -200,7 +263,15 @@ fun FavoritesScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                     contentPadding = PaddingValues(bottom = 96.dp)
                 ) {
-                    items(state.favoriteContacts, key = { it.id }) { contact ->
+                    items(displayedFavorites, key = { it.id }) { contact ->
+                        val tail = contact.normalizedNumber.takeLast(10)
+                        val assignedGroup = remember(contact.normalizedNumber, state.preferences.favoriteGroups) {
+                            state.preferences.favoriteGroups.entries.firstOrNull { (k, _) ->
+                                k == contact.normalizedNumber || (tail.length >= 8 && k.endsWith(tail))
+                            }?.value
+                        }
+                        var groupMenuOpen by remember { mutableStateOf(false) }
+
                         Column {
                             Row(
                                 modifier = Modifier
@@ -247,7 +318,7 @@ fun FavoritesScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Text(
                                             text = contact.name,
@@ -262,6 +333,19 @@ fun FavoritesScreen(
                                             tint = nova.gold,
                                             modifier = Modifier.size(15.dp)
                                         )
+                                        if (assignedGroup != null && assignedGroup != FavoriteGroup.ALL) {
+                                            Surface(
+                                                shape = RoundedCornerShape(50),
+                                                color = nova.goldContainer
+                                            ) {
+                                                Text(
+                                                    text = if (isBn) assignedGroup.labelBn else assignedGroup.labelEn,
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = nova.gold,
+                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                     Text(
                                         text = "${if (isBn) "মোবাইল" else "Mobile"} • ${formatDisplayNumber(contact.phoneNumber)}",
@@ -271,13 +355,50 @@ fun FavoritesScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                                Box {
+                                    IconButton(
+                                        onClick = { groupMenuOpen = true },
+                                        modifier = Modifier.size(38.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Group,
+                                            contentDescription = if (isBn) "গ্রুপ বাছুন" else "Assign Group",
+                                            tint = if (assignedGroup != null) nova.gold else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = groupMenuOpen,
+                                        onDismissRequest = { groupMenuOpen = false }
+                                    ) {
+                                        listOf(
+                                            FavoriteGroup.FAMILY,
+                                            FavoriteGroup.FRIENDS,
+                                            FavoriteGroup.OFFICE,
+                                            FavoriteGroup.ALL
+                                        ).forEach { grp ->
+                                            val label = if (grp == FavoriteGroup.ALL) {
+                                                if (isBn) "গ্রুপ সরান" else "No Group"
+                                            } else {
+                                                if (isBn) grp.labelBn else grp.labelEn
+                                            }
+                                            DropdownMenuItem(
+                                                text = { Text(label) },
+                                                onClick = {
+                                                    groupMenuOpen = false
+                                                    onAssignGroup(contact.phoneNumber, grp)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                                 IconButton(
-                                    onClick = { onOpenCallerDetail(contact.phoneNumber, contact.name) },
-                                    modifier = Modifier.size(44.dp)
+                                    onClick = { onOpenContactProfile(contact.phoneNumber, contact.name) },
+                                    modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Info,
-                                        contentDescription = if (isBn) "বিস্তারিত" else "Info",
+                                        contentDescription = if (isBn) "কন্টাক্ট প্রোফাইল" else "Contact Profile",
                                         tint = nova.sim2,
                                         modifier = Modifier.size(22.dp)
                                     )

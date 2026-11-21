@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.model.AppFontScale
@@ -16,12 +18,14 @@ import com.example.data.model.BrilliantBridgeStatus
 import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.DisplayThemeMode
+import com.example.data.model.FavoriteGroup
 import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SlideToAnswerMode
 import com.example.data.model.UserPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import org.json.JSONObject
 
 private val Context.novaDataStore: DataStore<Preferences> by preferencesDataStore(name = "novacall_prefs")
 
@@ -61,6 +65,15 @@ class PreferencesRepository(private val context: Context) {
         val INCOMING_CALL_STYLE = stringPreferencesKey("incoming_call_style")
         val SLIDE_TO_ANSWER = stringPreferencesKey("slide_to_answer_mode")
         val FAVORITE_NUMBERS = stringPreferencesKey("favorite_numbers_v1")
+        val FAVORITE_GROUPS_JSON = stringPreferencesKey("favorite_groups_json_v1")
+        val CALL_REMINDERS_JSON = stringPreferencesKey("call_reminders_json_v1")
+        val DND_ENABLED = booleanPreferencesKey("dnd_enabled")
+        val DND_START_MINUTES = intPreferencesKey("dnd_start_minutes")
+        val DND_END_MINUTES = intPreferencesKey("dnd_end_minutes")
+        val DND_ALLOW_FAVORITES = booleanPreferencesKey("dnd_allow_favorites")
+        val SPAM_PROTECTION_ENABLED = booleanPreferencesKey("spam_protection_enabled")
+        val AUTO_CALL_BACKUP_ENABLED = booleanPreferencesKey("auto_call_backup_enabled")
+        val LAST_BACKUP_TIMESTAMP = longPreferencesKey("last_backup_timestamp")
         val SIM1_BALANCE_USSD = stringPreferencesKey("sim1_balance_ussd")
         val SIM2_BALANCE_USSD = stringPreferencesKey("sim2_balance_ussd")
         val CUSTOM_RINGTONE_URI = stringPreferencesKey("custom_ringtone_uri")
@@ -147,6 +160,15 @@ class PreferencesRepository(private val context: Context) {
                 ?.filter { it.isNotEmpty() }
                 ?.toSet()
                 ?: emptySet(),
+            favoriteGroups = parseFavoriteGroups(prefs[Keys.FAVORITE_GROUPS_JSON]),
+            callReminderTimestamps = parseCallReminders(prefs[Keys.CALL_REMINDERS_JSON]),
+            dndEnabled = prefs[Keys.DND_ENABLED] ?: false,
+            dndStartMinutes = (prefs[Keys.DND_START_MINUTES] ?: (23 * 60)).coerceIn(0, 1439),
+            dndEndMinutes = (prefs[Keys.DND_END_MINUTES] ?: (7 * 60)).coerceIn(0, 1439),
+            dndAllowFavorites = prefs[Keys.DND_ALLOW_FAVORITES] ?: true,
+            spamProtectionEnabled = prefs[Keys.SPAM_PROTECTION_ENABLED] ?: true,
+            autoCallBackupEnabled = prefs[Keys.AUTO_CALL_BACKUP_ENABLED] ?: false,
+            lastBackupTimestamp = prefs[Keys.LAST_BACKUP_TIMESTAMP] ?: 0L,
             sim1BalanceUssd = prefs[Keys.SIM1_BALANCE_USSD] ?: "",
             sim2BalanceUssd = prefs[Keys.SIM2_BALANCE_USSD] ?: "",
             customRingtoneUri = prefs[Keys.CUSTOM_RINGTONE_URI] ?: "",
@@ -352,5 +374,91 @@ class PreferencesRepository(private val context: Context) {
             it[Keys.ICC_SIP_PASSWORD] = password
             it[Keys.ICC_ISP_CUSTOMER_ID] = ispCustomerId.trim()
         }
+    }
+
+    suspend fun updateFavoriteGroups(groups: Map<String, FavoriteGroup>) {
+        context.novaDataStore.edit {
+            val json = JSONObject()
+            groups.forEach { (key, value) ->
+                if (key.isNotBlank() && value != FavoriteGroup.ALL) {
+                    json.put(key, value.name)
+                }
+            }
+            it[Keys.FAVORITE_GROUPS_JSON] = json.toString()
+        }
+    }
+
+    suspend fun updateCallReminderTimestamps(reminders: Map<String, Long>) {
+        context.novaDataStore.edit {
+            val json = JSONObject()
+            val now = System.currentTimeMillis()
+            reminders.forEach { (key, millis) ->
+                if (key.isNotBlank() && millis > now - 300_000L) {
+                    json.put(key, millis)
+                }
+            }
+            it[Keys.CALL_REMINDERS_JSON] = json.toString()
+        }
+    }
+
+    suspend fun updateDndConfig(
+        enabled: Boolean,
+        startMinutes: Int,
+        endMinutes: Int,
+        allowFavorites: Boolean
+    ) {
+        context.novaDataStore.edit {
+            it[Keys.DND_ENABLED] = enabled
+            it[Keys.DND_START_MINUTES] = startMinutes.coerceIn(0, 1439)
+            it[Keys.DND_END_MINUTES] = endMinutes.coerceIn(0, 1439)
+            it[Keys.DND_ALLOW_FAVORITES] = allowFavorites
+        }
+    }
+
+    suspend fun updateSpamProtection(enabled: Boolean) {
+        context.novaDataStore.edit { it[Keys.SPAM_PROTECTION_ENABLED] = enabled }
+    }
+
+    suspend fun updateAutoCallBackup(enabled: Boolean) {
+        context.novaDataStore.edit { it[Keys.AUTO_CALL_BACKUP_ENABLED] = enabled }
+    }
+
+    suspend fun updateLastBackupTimestamp(timestamp: Long) {
+        context.novaDataStore.edit { it[Keys.LAST_BACKUP_TIMESTAMP] = timestamp }
+    }
+
+    private fun parseFavoriteGroups(raw: String?): Map<String, FavoriteGroup> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val obj = JSONObject(raw)
+            val result = mutableMapOf<String, FavoriteGroup>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = obj.optString(key)
+                val group = runCatching { FavoriteGroup.valueOf(value) }.getOrNull()
+                if (group != null && group != FavoriteGroup.ALL) {
+                    result[key] = group
+                }
+            }
+            result.toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun parseCallReminders(raw: String?): Map<String, Long> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val obj = JSONObject(raw)
+            val result = mutableMapOf<String, Long>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val ts = obj.optLong(key, 0L)
+                if (ts > 0L) {
+                    result[key] = ts
+                }
+            }
+            result.toMap()
+        }.getOrDefault(emptyMap())
     }
 }

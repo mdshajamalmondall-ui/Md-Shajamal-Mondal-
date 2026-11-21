@@ -271,7 +271,8 @@ fun CallHistoryBottomSheet(
     onCallNow: () -> Unit,
     onEditNumber: () -> Unit,
     onToggleBlock: (Boolean) -> Unit,
-    onDeleteSingleEntry: (String) -> Unit
+    onDeleteSingleEntry: (String) -> Unit,
+    onOpenFullProfile: (() -> Unit)? = null
 ) {
     val nova = LocalNovaColors.current
     val isBn = state.preferences.language == AppLanguage.BENGALI
@@ -419,7 +420,29 @@ fun CallHistoryBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            if (onOpenFullProfile != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = {
+                        onDismiss()
+                        onOpenFullProfile()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .testTag("history_sheet_full_profile_button"),
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(1.dp, nova.sim2.copy(alpha = 0.65f))
+                ) {
+                    Text(
+                        text = if (isBn) "সম্পূর্ণ কন্টাক্ট প্রোফাইল, নোট ও রিমাইন্ডার" else "Open Full Profile, Notes & Reminder",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = nova.sim2
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Section Title: Call History (N)
             Text(

@@ -14,6 +14,7 @@ import com.example.data.model.BrilliantLaunchMode
 import com.example.data.model.CallRoute
 import com.example.data.model.DefaultRoutePreference
 import com.example.data.model.DisplayThemeMode
+import com.example.data.model.FavoriteGroup
 import com.example.data.model.IncomingCallDisplayStyle
 import com.example.data.model.KeypadSoundStyle
 import com.example.data.model.SlideToAnswerMode
@@ -97,6 +98,30 @@ class DialerRepository(
 
     suspend fun clearLocalCallRecords() = dao.clearAppCallRecords()
 
+    suspend fun clearAllLocalUserData() {
+        dao.clearAppCallRecords()
+        dao.clearCallNotes()
+        dao.clearBlockedNumbers()
+        dao.clearSpeedDials()
+    }
+
+    suspend fun getSpeedDialsSnapshot(): List<SpeedDialEntity> = dao.getAllSpeedDialsOnce()
+    suspend fun getBlockedNumbersSnapshot(): List<BlockedNumberEntity> = dao.getAllBlockedNumbersOnce()
+    suspend fun getCallNotesSnapshot(): List<CallNoteEntity> = dao.getAllCallNotesOnce()
+    suspend fun getAppCallRecordsSnapshot(): List<AppCallRecordEntity> = dao.getAllAppCallRecordsOnce()
+
+    suspend fun restoreBackupEntities(
+        speedDials: List<SpeedDialEntity>,
+        blockedNumbers: List<BlockedNumberEntity>,
+        callNotes: List<CallNoteEntity>,
+        callRecords: List<AppCallRecordEntity>
+    ) {
+        speedDials.forEach { dao.upsertSpeedDial(it) }
+        blockedNumbers.forEach { dao.upsertBlockedNumber(it) }
+        callNotes.forEach { dao.upsertCallNote(it) }
+        callRecords.forEach { dao.insertAppCallRecord(it.copy(id = 0)) }
+    }
+
     suspend fun updateBrilliantPackage(pkg: String) = preferencesRepository.updateBrilliantPackage(pkg)
     suspend fun updateBrilliantLaunchMode(mode: BrilliantLaunchMode) = preferencesRepository.updateBrilliantLaunchMode(mode)
     suspend fun updateBrilliantAutoFormatBd(enabled: Boolean) = preferencesRepository.updateBrilliantAutoFormatBd(enabled)
@@ -128,6 +153,13 @@ class DialerRepository(
     suspend fun updateIncomingCallDisplayStyle(style: IncomingCallDisplayStyle) = preferencesRepository.updateIncomingCallDisplayStyle(style)
     suspend fun updateSlideToAnswerMode(mode: SlideToAnswerMode) = preferencesRepository.updateSlideToAnswerMode(mode)
     suspend fun updateFavoriteNumbers(numbers: Set<String>) = preferencesRepository.updateFavoriteNumbers(numbers)
+    suspend fun updateFavoriteGroups(groups: Map<String, FavoriteGroup>) = preferencesRepository.updateFavoriteGroups(groups)
+    suspend fun updateCallReminderTimestamps(reminders: Map<String, Long>) = preferencesRepository.updateCallReminderTimestamps(reminders)
+    suspend fun updateDndConfig(enabled: Boolean, startMinutes: Int, endMinutes: Int, allowFavorites: Boolean) =
+        preferencesRepository.updateDndConfig(enabled, startMinutes, endMinutes, allowFavorites)
+    suspend fun updateSpamProtection(enabled: Boolean) = preferencesRepository.updateSpamProtection(enabled)
+    suspend fun updateAutoCallBackup(enabled: Boolean) = preferencesRepository.updateAutoCallBackup(enabled)
+    suspend fun updateLastBackupTimestamp(timestamp: Long) = preferencesRepository.updateLastBackupTimestamp(timestamp)
     suspend fun updateSimBalanceUssd(slotIndex: Int, ussdCode: String) = preferencesRepository.updateSimBalanceUssd(slotIndex, ussdCode)
     suspend fun updateCustomRingtone(uri: String, title: String) = preferencesRepository.updateCustomRingtone(uri, title)
     suspend fun updateIccSipConfig(

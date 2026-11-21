@@ -20,9 +20,11 @@ object CallNotificationHelper {
     const val CHANNEL_INCOMING = "novacall_incoming_calls"
     const val CHANNEL_ONGOING = "novacall_ongoing_calls"
     const val CHANNEL_MISSED = "novacall_missed_calls"
+    const val CHANNEL_REMINDERS = "novacall_call_reminders"
 
     private const val NOTIF_ID_ACTIVE_CALL = 4101
     private const val NOTIF_ID_MISSED_BASE = 4200
+    private const val NOTIF_ID_REMINDER_BASE = 4500
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -56,9 +58,19 @@ object CallNotificationHelper {
             enableVibration(true)
         }
 
+        val reminders = NotificationChannel(
+            CHANNEL_REMINDERS,
+            "Call Reminders",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Scheduled callback reminders in Shajamal PRO DIALER"
+            enableVibration(true)
+        }
+
         manager.createNotificationChannel(incoming)
         manager.createNotificationChannel(ongoing)
         manager.createNotificationChannel(missed)
+        manager.createNotificationChannel(reminders)
     }
 
     private fun canPostNotifications(context: Context): Boolean {
@@ -193,6 +205,93 @@ object CallNotificationHelper {
 
         runCatching {
             val id = NOTIF_ID_MISSED_BASE + ((callerNumber.hashCode() and 0xFF))
+            NotificationManagerCompat.from(context).notify(id, notif)
+        }
+    }
+
+    fun scheduleCallReminder(
+        context: Context,
+        normalizedNumber: String,
+        displayNumber: String,
+        contactName: String,
+        note: String,
+        triggerAtMillis: Long
+    ) {
+        ensureChannels(context)
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager ?: return
+        val requestCode = 9000 + (normalizedNumber.hashCode() and 0x0FFF)
+        val intent = Intent(context, CallActionReceiver::class.java).apply {
+            action = CallActionReceiver.ACTION_CALL_REMINDER
+            putExtra(CallActionReceiver.EXTRA_REMINDER_NUMBER, displayNumber)
+            putExtra(CallActionReceiver.EXTRA_REMINDER_NAME, contactName)
+            putExtra(CallActionReceiver.EXTRA_REMINDER_NOTE, note)
+        }
+        val pending = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        runCatching {
+            alarmManager.setAndAllowWhileIdle(
+                android.app.AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pending
+            )
+        }
+    }
+
+    fun cancelCallReminder(context: Context, normalizedNumber: String) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager ?: return
+        val requestCode = 9000 + (normalizedNumber.hashCode() and 0x0FFF)
+        val intent = Intent(context, CallActionReceiver::class.java).apply {
+            action = CallActionReceiver.ACTION_CALL_REMINDER
+        }
+        val pending = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        runCatching { alarmManager.cancel(pending) }
+    }
+
+    fun showCallReminderNotification(
+        context: Context,
+        callerName: String,
+        callerNumber: String,
+        note: String
+    ) {
+        ensureChannels(context)
+        if (!canPostNotifications(context)) return
+
+        val dialIntent = Intent(Intent.ACTION_DIAL, android.net.Uri.fromParts("tel", callerNumber, null)).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val dialPending = PendingIntent.getActivity(
+            context,
+            500 + (callerNumber.hashCode() and 0xFF),
+            dialIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = callerName.ifBlank { callerNumber }.let { "Call Reminder: $it" }
+        val body = note.ifBlank { "Tap to call $callerNumber back now" }
+
+        val notif = NotificationCompat.Builder(context, CHANNEL_REMINDERS)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(dialPending)
+            .addAction(0, "Call Back", dialPending)
+            .build()
+
+        runCatching {
+            val id = NOTIF_ID_REMINDER_BASE + ((callerNumber.hashCode() and 0xFF))
             NotificationManagerCompat.from(context).notify(id, notif)
         }
     }

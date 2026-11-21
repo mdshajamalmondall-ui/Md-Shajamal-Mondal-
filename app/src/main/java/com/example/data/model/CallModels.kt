@@ -108,6 +108,53 @@ enum class SlideToAnswerMode {
     NEVER
 }
 
+enum class FavoriteGroup(val labelBn: String, val labelEn: String) {
+    ALL("সব", "All"),
+    FAMILY("পরিবার", "Family"),
+    FRIENDS("বন্ধু", "Friends"),
+    OFFICE("অফিস", "Office")
+}
+
+enum class AnalyticsPeriod(val labelBn: String, val labelEn: String) {
+    DAILY("দৈনিক", "Daily"),
+    WEEKLY("সাপ্তাহিক", "Weekly"),
+    MONTHLY("মাসিক", "Monthly")
+}
+
+@Immutable
+data class AnalyticsChartBucket(
+    val label: String,
+    val outgoingCount: Int,
+    val incomingCount: Int,
+    val missedCount: Int
+) {
+    val total: Int get() = outgoingCount + incomingCount + missedCount
+}
+
+@Immutable
+data class TopContactStat(
+    val displayName: String,
+    val number: String,
+    val photoUri: String?,
+    val callCount: Int,
+    val totalDurationSeconds: Long
+)
+
+@Immutable
+data class CallAnalyticsSummary(
+    val period: AnalyticsPeriod = AnalyticsPeriod.WEEKLY,
+    val totalCalls: Int = 0,
+    val outgoingCalls: Int = 0,
+    val incomingCalls: Int = 0,
+    val missedCalls: Int = 0,
+    val totalDurationSeconds: Long = 0L,
+    val sim1Calls: Int = 0,
+    val sim2Calls: Int = 0,
+    val blockedCount: Int = 0,
+    val buckets: List<AnalyticsChartBucket> = emptyList(),
+    val topContacts: List<TopContactStat> = emptyList()
+)
+
 data class CallingAccountOption(
     val id: String,
     val label: String,
@@ -204,6 +251,15 @@ data class UserPreferences(
     val incomingCallDisplayStyle: IncomingCallDisplayStyle = IncomingCallDisplayStyle.FULL_SCREEN,
     val slideToAnswerMode: SlideToAnswerMode = SlideToAnswerMode.LOCKED_ONLY,
     val favoriteNumbers: Set<String> = emptySet(),
+    val favoriteGroups: Map<String, FavoriteGroup> = emptyMap(),
+    val callReminderTimestamps: Map<String, Long> = emptyMap(),
+    val dndEnabled: Boolean = false,
+    val dndStartMinutes: Int = 23 * 60, // 23:00
+    val dndEndMinutes: Int = 7 * 60,    // 07:00
+    val dndAllowFavorites: Boolean = true,
+    val spamProtectionEnabled: Boolean = true,
+    val autoCallBackupEnabled: Boolean = false,
+    val lastBackupTimestamp: Long = 0L,
     val sim1BalanceUssd: String = "",
     val sim2BalanceUssd: String = "",
     val customRingtoneUri: String = "",
